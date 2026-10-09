@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="mn">
+<head>
+<meta charset="utf-8">
+<title>Хичээл 03 — MQTT</title>
+<link rel="stylesheet" href="../lessons.css">
+</head>
+<body>
+<div class="lesson-top">
+  <a href="../index.html">&#8592; Бүх хичээл</a>
+  <a href="javascript:void(0)" onclick="var p=window.parent;if(p!==window&&p.closeLesson){p.closeLesson();}else{window.close();} return false;">&#10005; Хаах</a>
+</div>
+
+<h1>Хичээл 03 — MQTT</h1>
+<p class="meta">Мэдээлэл солилцооны суурь</p>
+
+<p><b>MQTT</b> нь төхөөрөмж хоорондын хөнгөн, publish/subscribe загварын протокол. Төв нь <b>брокер</b> (энэ тохиолдолд манай <code>mqtt-server.js</code>). Клиентүүд брокерт холбогдож, <b>topic</b> руу зурвас нийтэлдэг, өөрсдийн сонирхсон topic-ийг <b>subscribe</b> хийдэг.</p>
+
+<h2>Topic tree</h2>
+<p>Topic нь <code>/</code> талбараар ялгагдана:</p>
+<table>
+<tr><th>Topic</th><th>Хэн нийтэлдэг</th><th>Агуулга</th></tr>
+<tr><td><code>radar/detections</code></td><td>газрын станц / симулятор</td><td>илрүүлсэн объект (lat, long, speed...)</td></tr>
+<tr><td><code>robots/&lt;name&gt;/status</code></td><td>Android робот</td><td>GPS, батарей, IMU, heading</td></tr>
+<tr><td><code>robots/&lt;name&gt;/radar</code></td><td>Android робот</td><td>LD2415H-ийн илрүүлэлт</td></tr>
+<tr><td><code>robots/&lt;name&gt;/cmd</code></td><td>вэб апп</td><td>(нөөцөд) командууд</td></tr>
+</table>
+<p><b>Wildcard:</b> <code>robots/+/status</code> гэдэг нь "ямар ч нэртэй робот бүрийн status" &mdash; <code>+</code> нь нэг түвшин. <code>#</code> нь бүх түвшинг хэлнэ.</p>
+
+<h2>Вэб аппны талд (Paho клиент)</h2>
+<p>Paho нь browser-ийн WebSocket дээр ажилладаг MQTT клиент. Аппын холболт:</p>
+<pre><code>state.mqttClient = new Paho.Client(host, parseInt(port), clientId);
+
+state.mqttClient.onConnectionLost = function(resp) {
+  state.mqttConnected = false;
+  document.getElementById('statusDot').className = 'status-dot status-disconnected';
+  document.getElementById('statusText').textContent = 'Disconnected';
+  log('Connection lost: ' + (resp.errorMessage || 'unknown'));
+};
+
+state.mqttClient.onMessageArrived = function(msg) {
+  const t = msg.destinationName;
+  if (t.indexOf('robots/') === 0) { handleRobotMsg(t, msg.payloadString); return; }
+  try { addDetection(JSON.parse(msg.payloadString)); }
+  catch (e) { log('Invalid message: ' + e.message); }
+};
+
+state.mqttClient.connect({
+  onSuccess: function() {
+    state.mqttConnected = true;
+    // гол топик + бүх роботууд:
+    client.subscribe(topic);
+    client.subscribe('robots/+/status');
+    client.subscribe('robots/+/radar');
+    ...
+  }
+});</code></pre>
+
+<h2>Серверийн талд (aedes)</h2>
+<p>Сервер нь aedes брокер ажиллуулж, TCP (1883) болон WebSocket (8080) хоёроор хоёуланг нь хүлээн авдаг:</p>
+<pre><code>const aedes = require('aedes')();
+const ws = require('ws');
+const net = require('net');
+
+// WebSocket дээр: HTTP серверийг upgrade хийх
+const wsServer = new ws.Server({ server: httpServer });
+wsServer.on('connection', socket =&gt; aedes.handle(ws.createWebSocketStream(socket)));
+
+// TCP дээр: энгийн tcp server
+const tcpServer = net.createServer(aedes.handle);</code></pre>
+
+<p>Мөн сервер брокерийн <code>publish</code> событыг сонсож, <code>robots/&lt;name&gt;/status|radar</code>-ыг шууд register хийгээд <code>/api/robots</code>-нд худалдаалдаг. Энэ нь вэб аппгүйгээр ч робот онлайнаас харах боломж.</p>
+
+<h2>Зурвасын формат (JSON)</h2>
+<p>Робот status жишээ:</p>
+<pre><code>{
+  "name": "robot-1",
+  "lat": 47.91856696684756, "long": 106.91779462330955,
+  "alt": 1280.5, "speed": 0.2, "accuracy": 3.0, "hasLocation": true,
+  "battery": 86, "charging": false, "voltage": 4.02,
+  "accel": [0.1, 9.8, 0.3], "gyro": [0.01, -0.02, 0.03],
+  "heading": 90.0, "ts": 1757482200000
+}</code></pre>
+<p>Радар илрүүлэлт:</p>
+<pre><code>{
+  "name": "robot-1", "state": 1, "dist": 420, "ena": 55,
+  "targets": [ { "g": 2, "t": 0, "d": 420, "e": 55 } ],
+  "ts": 1757482200000
+}</code></pre>
+<p><code>state</code>: 0=юу ч байхгүй, 1=хөдөлгөөнт, 2=тогтмол. <code>dist</code>=зай (cm), <code>ena</code>=хүч.</p>
+
+<h2>Туршилт (mosquitto клиент)</h2>
+<pre><code>mosquitto_pub -h localhost -t "radar/detections" -m '{"datetime":"2026-09-10 14:30:00","lat":47.9185,"long":106.9177,"altitude":500,"speed":120,"direction":45,"object_name":"target-01"}'
+mosquitto_sub -h localhost -t "robots/+/status"</code></pre>
+
+<div class="note">WebSocket болон TCP дээрх ижил брокер: телефон (TCP) болон browser (WS) бие биенээ хардаг.</div>
+
+<h3>Дасгал</h3>
+<ul>
+  <li><code>subscribe('robots/+/radar')</code>-г салгаад ямар өөрчлөлт гарахыг ажигла.</li>
+  <li>Өөрийн topic <code>alerts</code> буцалт аддаад, аппнаас subscribe хийж тестл.</li>
+</ul>
+</body>
+</html>

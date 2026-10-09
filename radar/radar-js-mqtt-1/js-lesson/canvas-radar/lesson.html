@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="mn">
+<head>
+<meta charset="utf-8">
+<title>Хичээл 05 — Canvas радар</title>
+<link rel="stylesheet" href="../lessons.css">
+</head>
+<body>
+<div class="lesson-top">
+  <a href="../index.html">&#8592; Бүх хичээл</a>
+  <a href="javascript:void(0)" onclick="var p=window.parent;if(p!==window&&p.closeLesson){p.closeLesson();}else{window.close();} return false;">&#10005; Хаах</a>
+</div>
+
+<h1>Хичээл 05 — HTML5 Canvas радар</h1>
+<p class="meta">Радар overlay, эргэлт, координатын тооцоо</p>
+
+<p>Радар нь газрын зургийн дээгүүр тунгалаг canvas-аар зурагддаг. Canvas нь төв рүү төвлөрсөн тойрог, шугам сүлжээ, хөдөлгөөнт цацраг, blip-уудыг 60fps хурдтайгаар зурна.</p>
+
+<h2>1. Canvas ба масштаб (devicePixelRatio)</h2>
+<pre><code>const radarCanvas = document.getElementById('radarOverlay');
+const rctx = radarCanvas.getContext('2d');
+
+function resizeRadar() {
+  const dpr = window.devicePixelRatio || 1;
+  radarCanvas.width  = radarCanvas.clientWidth  * dpr;
+  radarCanvas.height = radarCanvas.clientHeight * dpr;
+  rctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+window.addEventListener('resize', resizeRadar);</code></pre>
+<p>Энэ нь өндөр масштабтай дэлгэц дээр ч зураг тод (хурц) хэвээр байх баталгаа.</p>
+
+<h2>2. Радарын төв ба радиус</h2>
+<pre><code>function drawRadarOverlay() {
+  const w = radarCanvas.clientWidth, h = radarCanvas.clientHeight;
+  const cx = w / 2, cy = h / 2;               // төвийн цэг
+  const radius = Math.min(w, h) / 2 - 20;     // хүрээний радиус
+  ...
+}</code></pre>
+<p>Радарын хүрээ квadrad хэлбэртэй контейнерийн төвд, хамгийн жижиг талын 50%-аас 20px-ээр дотогшлод.</p>
+
+<h2>3. Хөдөлгөөнт цацраг (sweep)</h2>
+<pre><code>function step(t) {
+  if (state.mapTheme === 'dark' || state.mapTheme === 'black') {
+    state.sweepAngle = (state.sweepAngle + 0.8) % 360;
+    drawRadarOverlay();
+  }
+  requestAnimationFrame(step);
+}</code></pre>
+<p>Өнцөг бүр кадр тутамд 0.8&deg;-ээр нэмэгдэнэ (&asymp; 2.6 сек/эргэлт). <code>drawRadarOverlay()</code> нь цацрагыг сүүлийн <code>sweepLength</code> градусаар сүүдрэх (fade) болгон зурдаг:</p>
+<pre><code>const sweepStart = (state.sweepAngle - 90 + 360) % 360;   // 90°-ийн цацраг
+ctx.beginPath();
+ctx.moveTo(cx, cy);
+ctx.arc(cx, cy, radius, deg(rad - sweepLength), deg(rad));
+ctx.closePath();
+ctx.fillStyle = 'rgba(0,255,0,0.25)';   // сүүдрийн давхарга
+ctx.fill();</code></pre>
+
+<h2>4. Тойрог ба шугам (радар grid)</h2>
+<pre><code>for (let ring = 1; ring &lt;= rings; ring++) {
+  const rr = radius * ring / rings;
+  ctx.beginPath();
+  ctx.arc(cx, cy, rr, 0, 2 * Math.PI);
+  ctx.strokeStyle = 'rgba(0,255,0,0.5)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+}
+// босоо/хэвтээ шугам
+ctx.beginPath();
+ctx.moveTo(cx - radius, cy); ctx.lineTo(cx + radius, cy);
+ctx.strokeStyle = 'rgba(0,255,0,0.3)';
+ctx.stroke();
+ctx.beginPath();
+ctx.moveTo(cx, cy - radius); ctx.lineTo(cx, cy + radius);
+ctx.stroke();</code></pre>
+
+<h2>5. Зайны хувиргалт (px руу)</h2>
+<p>Радар дээр blip-ын пиксель байрлал = зай/макс хүрээ &times; радиус:</p>
+<pre><code>function distToPx(meters) {
+  return meters / state.maxRangeM * (Math.min(w,h) / 2 - 20);
+}</code></pre>
+<p>Тодорхой чиглэлд (бөмбөрцөг координат) blip зурхайн хувьд:</p>
+<pre><code>function llDest(lat, lon, bearingDeg, distM) {
+  const R = 6371000;               // Дэлхийн радиус (m)
+  const d = distM / R;             // өнцгийн зай
+  const brng = bearingDeg * Math.PI / 180;
+  const la1 = lat * Math.PI / 180, lo1 = lon * Math.PI / 180;
+  const la2 = Math.asin(Math.sin(la1)*Math.cos(d) + Math.cos(la1)*Math.sin(d)*Math.cos(brng));
+  const lo2 = lo1 + Math.atan2(Math.sin(brng)*Math.sin(d)*Math.cos(la1),
+                               Math.cos(d) - Math.sin(la1)*Math.sin(la2));
+  return [la2*180/Math.PI, lo2*180/Math.PI];
+}</code></pre>
+<p>Энэ функциум роботын радар blip (зай + толгой чиглэл) ашиглан байрлалыг тооцож, Leaflet дээр тэмдэглэдэг. LD2415H нь зай л өгдөг тул роботын heading чиглэлд <code>dist</code> метрийн зайд blip зурна.</p>
+
+<h2>6. Blip (объект цэг)</h2>
+<pre><code>state.blips.forEach(b =&gt; {
+  const angle = b.direction - 90;   // хойд/болор
+  const rad = (angle * Math.PI) / 180;
+  const r = distToPx(b.distance);
+  const x = cx + Math.cos(rad) * r;
+  const y = cy + Math.sin(rad) * r;
+  ctx.beginPath();
+  ctx.arc(x, y, 3, 0, 2 * Math.PI);
+  ctx.fillStyle = b.color;
+  ctx.shadowBlur = 6;
+  ctx.shadowColor = b.color;
+  ctx.fill();
+});</code></pre>
+<p>Blip бүсмөргүй фейд болдог: <code>state.blips</code> нь <code>state.now - b.ts &lt; 5000</code> байвал зурагддаг, өнгө нь theme дагуу:</p>
+<pre><code>const base = state.colors[state.colorTheme];
+const cols = makeColorSet(base);   // {base, brighter, dimmer, bg}
+</code></pre>
+
+<div class="note">Радарын параметрүүд (<code>maxRangeM</code>, <code>rings</code>, <code>sweepLength</code>, өнгө) sidebar дээр өөрчлөгддөг &mdash; өөрчлөлт хийгээд шууд харна.</div>
+
+<h3>Дасгал</h3>
+<ul>
+  <li><code>sweepLength</code> утгыг өөрчилөөд цацраг өргөрөхийг хар.</li>
+  <li>Тойргийн өнгийг өөрийн сонгосон өнгөөр (жишээ: <code>#ff0</code>) өөрчил.</li>
+  <li><code>distToPx</code> дээр <code>maxRangeM</code> ашиглахгүй бол юу болохыг бод.</li>
+</ul>
+</body>
+</html>

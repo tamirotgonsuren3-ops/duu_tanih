@@ -1,0 +1,13 @@
+{
+  "name": "radar-mqtt-server",
+  "version": "1.0.0",
+  "description": "Local MQTT broker + Radar web app server",
+  "main": "mqtt-server.js",
+  "scripts": {
+    "start": "node mqtt-server.js"
+  },
+  "dependencies": {
+    "aedes": "^0.51.3",
+    "ws": "^8.18.0"
+  }
+}

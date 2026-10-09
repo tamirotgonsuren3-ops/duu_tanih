@@ -1,0 +1,235 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true"
+    android:background="#0a0a0a">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="14dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Robotic RADAR Link"
+            android:textColor="#00ff00"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.1" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="GPS + battery + IMU + camera + HLK-LD2415H radar -&gt; MQTT"
+            android:textColor="#888888"
+            android:textSize="12sp"
+            android:layout_marginBottom="10dp" />
+
+        <!-- Robot identity -->
+        <TextView style="@style/FieldLabel" android:text="ROBOT NAME" />
+        <EditText
+            android:id="@+id/etRobot"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="e.g. robot-1"
+            android:inputType="text"
+            android:textColor="#ffffff"
+            android:backgroundTint="#333333" />
+
+        <!-- MQTT connection -->
+        <TextView style="@style/FieldLabel" android:text="BROKER (NODE.JS SERVER HOST)" />
+        <EditText
+            android:id="@+id/etMqttHost"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="e.g. 192.168.1.100"
+            android:inputType="textUri" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="6dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+                <TextView style="@style/FieldLabel" android:text="MQTT TCP PORT" />
+                <EditText
+                    android:id="@+id/etMqttTcpPort"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="number"
+                    android:text="1883" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:layout_marginStart="8dp">
+                <TextView style="@style/FieldLabel" android:text="HTTP PORT (CAMERA)" />
+                <EditText
+                    android:id="@+id/etHttpPort"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="number"
+                    android:text="8080" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="6dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+                <TextView style="@style/FieldLabel" android:text="STATUS INTERVAL ms" />
+                <EditText
+                    android:id="@+id/etIntervalMs"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="number"
+                    android:text="1000" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:layout_marginStart="8dp">
+                <TextView style="@style/FieldLabel" android:text="CAMERA FRAME ms" />
+                <EditText
+                    android:id="@+id/etCamMs"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="number"
+                    android:text="1000" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="10dp">
+            <Button
+                android:id="@+id/btnStart"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="START" />
+            <Button
+                android:id="@+id/btnStop"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:text="STOP"
+                android:enabled="false" />
+        </LinearLayout>
+
+        <!-- Status block -->
+        <TextView style="@style/FieldLabel" android:text="STATUS" />
+        <TextView
+            android:id="@+id/tvStatusMqtt"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="MQTT: --"
+            android:textColor="#aaaaaa"
+            android:textSize="12sp" />
+        <TextView
+            android:id="@+id/tvStatusUsb"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="USB radar: --"
+            android:textColor="#aaaaaa"
+            android:textSize="12sp" />
+        <TextView
+            android:id="@+id/tvStatusGps"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="GPS: --"
+            android:textColor="#aaaaaa"
+            android:textSize="12sp" />
+        <TextView
+            android:id="@+id/tvStatusSensors"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="IMU: --"
+            android:textColor="#aaaaaa"
+            android:textSize="12sp" />
+        <TextView
+            android:id="@+id/tvStatusBattery"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Battery: --"
+            android:textColor="#aaaaaa"
+            android:textSize="12sp" />
+
+        <!-- Radar -->
+        <TextView style="@style/FieldLabel" android:text="RADAR DETECTION" />
+        <TextView
+            android:id="@+id/tvRadarText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="no detection yet"
+            android:textColor="#00ff00"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <!-- Camera -->
+        <TextView style="@style/FieldLabel" android:text="CAMERA PREVIEW (IP STREAM)" />
+        <TextureView
+            android:id="@+id/textureView"
+            android:layout_width="match_parent"
+            android:layout_height="220dp"
+            android:background="#000000" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="6dp">
+            <Button
+                android:id="@+id/btnCamStart"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="CAMERA ON" />
+            <Button
+                android:id="@+id/btnCamStop"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:text="CAMERA OFF"
+                android:enabled="false" />
+        </LinearLayout>
+
+        <!-- Log -->
+        <TextView style="@style/FieldLabel" android:text="LOG" />
+        <TextView
+            android:id="@+id/tvLog"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="120dp"
+            android:padding="8dp"
+            android:background="#0d0d0d"
+            android:textColor="#888888"
+            android:textSize="11sp"
+            android:typeface="monospace" />
+
+    </LinearLayout>
+</ScrollView>

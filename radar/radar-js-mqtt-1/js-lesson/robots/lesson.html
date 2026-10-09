@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="mn">
+<head>
+<meta charset="utf-8">
+<title>Хичээл 07 — Robots дэд систем</title>
+<link rel="stylesheet" href="../lessons.css">
+</head>
+<body>
+<div class="lesson-top">
+  <a href="../index.html">&#8592; Бүх хичээл</a>
+  <a href="javascript:void(0)" onclick="var p=window.parent;if(p!==window&&p.closeLesson){p.closeLesson();}else{window.close();} return false;">&#10005; Хаах</a>
+</div>
+
+<h1>Хичээл 07 — Robots дэд систем</h1>
+<p class="meta">Роботууд: status, радар, тохиргоо, камер</p>
+
+<p>Физик робот бүр: телефон + Arduino + HLK-LD2415H радар (OTG USB). Телефон нь MQTT-ээр <code>robots/&lt;name&gt;/status</code> болон <code>robots/&lt;name&gt;/radar</code>-ыг нийтэлж, вэб апп захиалдаг.</p>
+
+<h2>1. Хүлээн авах, хадгалах</h2>
+<pre><code>const state = { ..., robots: {}, robotCfg: {} };
+
+function handleRobotMsg(topic, payload) {
+  const m = t.split('/');                  // ['robots','robot-1','status']
+  const name = m[1];
+  const kind = m[2];
+  const data = JSON.parse(payload);
+  const r = ensureRobot(name);             // шинэ робот үүсгэх юм
+  r.lastSeen = Date.now();
+  if (kind === 'status') Object.assign(r, data);   // GPS, батарея гэх мэт
+  else { r.lastRadar = data; r.blips = radarToBlips(data); }
+  renderRobotsTables();
+  drawRobotOnMapSafe(r);                   // зургуудаа (sig) давхарт нь шалган зурна
+}</code></pre>
+<p><code>ensureRobot(name)</code> нь <code>state.robots[name]</code> байхгүй бол тохиргоогоор (default range 200m, ring 4, color green, useGps true) шинээр үүсгэдэг:</p>
+<pre><code>function ensureRobot(name) {
+  if (state.robots[name]) return state.robots[name];
+  const cfg = state.robotCfg[name] || {};
+  const r = Object.assign({ name }, defaultRobot, cfg);
+  state.robots[name] = r;
+  return r;
+}</code></pre>
+
+<h2>2. Хадгалалт (localStorage)</h2>
+<pre><code>const cfgKey = 'radar_robot_cfg';
+function saveRobotCfg() {
+  localStorage.setItem(cfgKey, JSON.stringify(state.robotCfg));
+}
+function loadRobotCfg() {
+  try { state.robotCfg = JSON.parse(localStorage.getItem(cfgKey)) || {}; }
+  catch (e) { state.robotCfg = {}; }
+}</code></pre>
+<p>Хуудас дахин ачаалагдсаны дараа роботууд ижил тохиргоотой байна. <code>robots/+/radar</code> ба <code>robots/+/status</code> топикуудыг <code>onSuccess</code> дотор захиална.</p>
+
+<h2>3. Хүснэгтүүд + online/offline</h2>
+<p>Гурван байршил байна: Home (заах хүснэгт), Robots хуудас (шиг хүснэгт), sidebar summary. Ойролцоогоор online гэж тооцоолдог:</p>
+<pre><code>function isRobotOnline(r) {
+  return (Date.now() - r.lastSeen) &lt; 12000;   // 12 секундээс дээшгүй
+}</code></pre>
+<p>Тогтмол <code>setInterval(tickRobots, 5000)</code> нь хүснэгтүүдийг дахин зурдаг. Мөр бүр дээр:</p>
+<table>
+<tr><th>Багана</th><th>Утга</th></tr>
+<tr><td>Төлөв (dot)</td><td>ногоон=online, саарал=offline</td></tr>
+<tr><td>Нэр</td><td>дархад тохиргоо нээгдэнэ</td></tr>
+<tr><td>GPS</td><td>lat, long (6 аравтын орон)</td></tr>
+<tr><td>Батарея</td><td>% ба charging</td></tr>
+<tr><td>Радар</td><td>сүүлийн <code>dist</code> м (жишээ "120 m")</td></tr>
+<tr><td>Үйлдэл</td><td>Camera, Center, Remove</td></tr>
+</table>
+
+<h2>4. Мап дээрх роботын радар</h2>
+<p>Робот бүр Leaflet дээр хүрээлэгдсэн тойрогтой:</p>
+<pre><code>function drawRobotOnMap(r) {
+  const cols = makeColorSet(r.color);
+  const group = L.layerGroup();
+  group.addLayer(L.circle([r.lat, r.lon], { radius: r.rangeM, color: r.color, fill: false }));
+  // rings (ялга өнгийн цагирагууд)
+  for (let i = 1; i &lt;= r.rings; i++)
+    group.addLayer(L.circle([r.lat, r.lon], { radius: r.rangeM * i / r.rings, color: cols.dimmer, dashArray: '4 6' }));
+  // heading (машигийн явах чиглэл)
+  if (r.heading != null) {
+    const dest = llDest(r.lat, r.lon, r.heading, r.rangeM * 0.8);
+    group.addLayer(L.polyline([[r.lat, r.lon], dest], { color: r.color }));
+  }
+  // blips: LL->хүрээний доторх цэгүүд (LD2415H зай + heading)
+  (r.blips || []).forEach(b =&gt; {
+    group.addLayer(L.circleMarker([b.lat, b.lon], { radius: 6, color: 'yellow', fillColor: 'yellow', fillOpacity: 0.9 }));
+  });
+  group.addTo(map);
+  r.layers = { group };
+}</code></pre>
+
+<h2>5. Тохиргооны модаль</h2>
+<p>Мөр дээр дархад <code>openRobotConfig(name)</code> нь модаль нээгээд өнөөгийн утгуудыг дүүргэнэ:</p>
+<ul>
+  <li>Нэр (rename — уншихыг нарийн: ижил нэртэй робот байвал зөвшөөрөхгүй)</li>
+  <li>Хүрээ (m), цагирагууд, өнгө (color picker), useGps (мап дахь GPS / manual)</li>
+  <li>Heading, "Center map here", Camera view</li>
+</ul>
+<p>Хадгалах <code>saveRobotConfig()</code> нь <code>state.robotCfg[name]</code> шинэчилж, localStorage-д хадгалаад, мап дээр дахин зурна. <code>removeRobot(name)</code> нь мап давхаргуудыг устгаж, хүснэгтүүдээс хасна (confirm асууна).</p>
+
+<h2>6. Камер viewer</h2>
+<p>Роботын камерыг live харна: <code>&lt;img src="/cam/&lt;name&gt;/mjpeg"&gt;</code>. Энэ нь серверийн MJPEG stream-ээ без обновления хэлбэрээр харж болно:</p>
+<pre><code>function openCam(name) {
+  document.getElementById('camImg').src = '/cam/' + encodeURIComponent(name) + '/mjpeg';
+  document.getElementById('camTitle').textContent = 'Camera — ' + name;
+  document.getElementById('camOverlay').style.display = 'flex';
+}</code></pre>
+
+<div class="note">Роботын GPS ирвэл <code>useGps</code>-ээр мап дээрх байрлал автоматаар шинэчлэгдэнэ. GPS-гүй бол (гадаа) manual байрлалыг модульд оруулна.</div>
+
+<h3>Дасгал</h3>
+<ul>
+  <li>Роботын радиусаа 100 м-ээр бууруулаад мап дээр жижиг тойрог болно.</li>
+  <li><code>isRobotOnline</code>-ийн 12 секундийг өөрчилөөд heavy дамжуулалт турш.</li>
+</ul>
+</body>
+</html>

@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="mn">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JS Lesson — Radar Web App</title>
+<link rel="stylesheet" href="lessons.css">
+</head>
+<body>
+<div class="lesson-top">
+  <a href="javascript:void(0)" onclick="var p=window.parent;if(p!==window&&p.closeLesson){p.closeLesson();}else{location.href='../radar.html';}">&#8592; App руу буцах</a>
+  <a href="javascript:void(0)" onclick="var p=window.parent;if(p!==window&&p.closeLesson){p.closeLesson();}else{window.close();} return false;">&#10005; Хаах</a>
+</div>
+
+<h1>&#x1F4DA; JS Lesson</h1>
+<p class="meta">Энэ вэб апп хэрхэн бүтсэний хичээл &mdash; технологи бүрээр хуваагдсан.</p>
+
+<p>Энэ апп нь <b>радар илрүүлэлтийн систем</b> юм: Node.js дотоод MQTT брокер + Leaflet газрын зураг + HTML5 Canvas радар + Android роботууд. Доорх хичээл тус бүр нэг технологийг, бодит кодын жишээтэйгээр тайлбарлана. Дарааллаар нь, эсвэл сонирхсон сэдвээ сонгон унших боломжтой.</p>
+
+<h2>Хичээлийн жагсаалт</h2>
+
+<div class="card">
+  <span class="badge">01</span><h3 style="display:inline">HTML &amp; CSS — хуудасны бүтэц</h3>
+  <p>Sidebar + үндсэн хэсгийн бүтэц, flexbox байрлал, тем/өнгө, хүснэгт ба модаль цонхны загвар.</p>
+  <a href="html-css/lesson.html">Унших &rarr;</a>
+</div>
+
+<div class="card">
+  <span class="badge">02</span><h3 style="display:inline">JavaScript — аппын цөм</h3>
+  <p>Төлөвийн объект (<code>state</code>), DOM ажиллагаа, мэдээ хүлээн авах, localStorage, loop/цаг зохицуулалт.</p>
+  <a href="javascript/lesson.html">Унших &rarr;</a>
+</div>
+
+<div class="card">
+  <span class="badge">03</span><h3 style="display:inline">MQTT — мэдээлэл солилцооны суурь</h3>
+  <p>Topic tree, publish/subscribe, Paho клиент, aedes брокер, <code>radar/detections</code> ба <code>robots/+/status</code> топикууд.</p>
+  <a href="mqtt/lesson.html">Унших &rarr;</a>
+</div>
+
+<div class="card">
+  <span class="badge">04</span><h3 style="display:inline">Leaflet — газрын зураг</h3>
+  <p>Зургийн init, tile provider-үүд, Google Mutant, тэмдэглэгээ/тойрог/шугам, явах үед төвийг синк хийх.</p>
+  <a href="leaflet/lesson.html">Унших &rarr;</a>
+</div>
+
+<div class="card">
+  <span class="badge">05</span><h3 style="display:inline">HTML5 Canvas — радар зуралт</h3>
+  <p>Радар overlay, <code>requestAnimationFrame</code> эргэлт, тойрог/шугам хэмжээ, Blip болон роботын чиглэлийн тооцоо.</p>
+  <a href="canvas-radar/lesson.html">Унших &rarr;</a>
+</div>
+
+<div class="card">
+  <span class="badge">06</span><h3 style="display:inline">Node.js — сервер ба брокер</h3>
+  <p>aedes брокер (TCP+WS), HTTP статик сервер, <code>/config.json</code>, порт fallback, камерын MJPEG stream.</p>
+  <a href="nodejs/lesson.html">Унших &rarr;</a>
+</div>
+
+<div class="card">
+  <span class="badge">07</span><h3 style="display:inline">Robots дэд систем</h3>
+  <p>Роботуудын status/radar топик, localStorage тохиргоо, online/offline шинэчлэлт, мап дээр роботын радар, камер viewer.</p>
+  <a href="robots/lesson.html">Унших &rarr;</a>
+</div>
+
+<div class="card">
+  <span class="badge">08</span><h3 style="display:inline">Arduino — LD2415H радар</h3>
+  <p>Угсралт (UART), пакетын формат, CRC16, програм нь JSON мөр хэрхэн үүсгэдэг.</p>
+  <a href="arduino/lesson.html">Унших &rarr;</a>
+</div>
+
+<div class="card">
+  <span class="badge">09</span><h3 style="display:inline">Android — телефон холбоос</h3>
+  <p>Android Studio төсөл, мэдрэгч/GPS/батарей, MQTT publish, USB serial, камерыг MJPEG-ээр server лүү илгээх.</p>
+  <a href="android/lesson.html">Унших &rarr;</a>
+</div>
+
+<div class="card">
+  <span class="badge">10</span><h3 style="display:inline">Дадлага</h3>
+  <p>Жижиг даалгаварууд: өөр топик, өөр tile provider, өөрийн MQTT клиент, радар параметр өөрчлөх, CDP-ээр тестлэх.</p>
+  <a href="practice/lesson.html">Унших &rarr;</a>
+</div>
+
+<div class="note">
+  Бүх хичээлүүд нь энэхүү төслийн <b>бодит код</b> дээр суурилсан. Аппын эх код <code>radar.html</code>, <code>mqtt-server.js</code>, <code>android-robot-app/</code>, <code>arduino/</code> фолдеруудад байна.
+</div>
+
+</body>
+</html>

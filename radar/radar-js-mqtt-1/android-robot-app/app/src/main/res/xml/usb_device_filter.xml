@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Matches any USB device so OTG serial adapters (CH340, CP210x, FTDI, CDC Arduino, etc.) are offered -->
+<resources>
+    <usb-device />
+</resources>

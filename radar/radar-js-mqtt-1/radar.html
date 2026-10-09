@@ -1,0 +1,1590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Дрон илрүүлэх систем</title>
+<link rel="stylesheet" href="/leaflet/leaflet.css">
+<script src="/leaflet/leaflet.js"></script>
+<script src="/leaflet/GoogleMutant.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{height:100%;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#0a0a0a;color:#ccc;overflow:hidden;}
+#app{display:flex;height:100vh;width:100vw;}
+
+/* ---------- Sidebar ---------- */
+#sidebar{width:340px;min-width:340px;background:#111;border-right:1px solid #222;overflow-y:auto;padding:0;display:flex;flex-direction:column;}
+#sidebar::-webkit-scrollbar{width:6px;}
+#sidebar::-webkit-scrollbar-thumb{background:#333;border-radius:3px;}
+.sidebar-header{background:#1a1a2e;padding:16px 20px;border-bottom:1px solid #222;text-align:center;}
+.sidebar-header h1{font-size:18px;color:#0f0;letter-spacing:2px;text-transform:uppercase;}
+.sidebar-header .subtitle{font-size:11px;color:#666;margin-top:4px;letter-spacing:1px;}
+.nav-tabs{display:flex;border-bottom:2px solid #1a1a1a;background:#0d0d0d;}
+.nav-tab{flex:1;text-align:center;padding:10px 0;font-size:12px;text-transform:uppercase;letter-spacing:1.5px;color:#888;cursor:pointer;transition:all 0.2s;border-bottom:2px solid transparent;}
+.nav-tab:hover{color:#0f0;}
+.nav-tab.active{color:#0f0;border-bottom-color:#0f0;background:#141414;font-weight:700;}
+.section{padding:16px 20px;border-bottom:1px solid #1a1a1a;}
+.section-title{font-size:12px;text-transform:uppercase;letter-spacing:1.5px;color:#0f0;margin-bottom:12px;font-weight:600;}
+.field{margin-bottom:10px;}
+.field label{display:block;font-size:11px;color:#888;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;}
+.field input,.field select,.field textarea{width:100%;background:#1a1a1a;border:1px solid #333;color:#ddd;padding:8px 10px;border-radius:4px;font-size:13px;outline:none;transition:border-color 0.2s;}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:#0f0;}
+.field textarea{resize:vertical;min-height:60px;font-family:monospace;font-size:11px;line-height:1.5;}
+.btn{padding:8px 16px;border:none;border-radius:4px;cursor:pointer;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:1px;transition:all 0.2s;width:100%;}
+.btn-primary{background:#0f0;color:#000;}.btn-primary:hover{background:#0c0;}
+.btn-danger{background:#f00;color:#fff;}.btn-danger:hover{background:#c00;}
+.btn-secondary{background:#333;color:#ccc;}.btn-secondary:hover{background:#444;}
+.btn-sm{padding:5px 10px;font-size:10px;width:auto;display:inline-block;}
+.btn-pair{display:flex;gap:8px;}
+.status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle;}
+.status-connected{background:#0f0;box-shadow:0 0 6px #0f0;}
+.status-disconnected{background:#f00;box-shadow:0 0 6px #f00;}
+.status-connecting{background:#ff0;box-shadow:0 0 6px #ff0;}
+.robot-summary{font-size:11px;color:#888;padding:8px 20px;background:#0d0d0d;border-bottom:1px solid #1a1a1a;display:flex;gap:10px;align-items:center;}
+.robot-summary b{color:#0f0;}
+
+/* ---------- Main / views ---------- */
+#main{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+#homeView{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;}
+#robotsView{flex:1;display:flex;flex-direction:column;overflow:hidden;background:#0a0a0a;}
+.page-hidden{display:none !important;}
+
+/* Radar + map */
+#radar-container{position:relative;width:100%;height:100vh;min-height:100vh;flex:none;}
+#map{position:absolute;inset:0;}
+#radarOverlay{position:absolute;inset:0;pointer-events:none;cursor:crosshair;z-index:800;}
+#map-tools{position:absolute;top:8px;left:8px;z-index:1000;display:flex;gap:6px;}
+#map-tools button{background:#1a1a1a;border:1px solid #333;color:#ccc;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:11px;text-transform:uppercase;letter-spacing:1px;transition:all 0.2s;}
+#map-tools button:hover{border-color:#0f0;color:#0f0;}
+#map-tools button.active{background:#0f0;color:#000;border-color:#0f0;}
+.ticker{position:absolute;top:8px;right:16px;z-index:1000;font-size:11px;color:#0f0;opacity:0.7;letter-spacing:1px;}
+.legend{position:absolute;bottom:8px;left:16px;z-index:1000;display:flex;gap:16px;font-size:10px;color:#666;background:rgba(0,0,0,0.5);padding:4px 10px;border-radius:4px;}
+.legend span::before{content:'';display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;vertical-align:middle;}
+.legend .l-active::before{background:#0f0;box-shadow:0 0 4px #0f0;}
+.legend .l-old::before{background:#0a0;opacity:0.5;}
+.legend .l-sweep::before{background:#0f0;opacity:0.3;}
+#centerPin{position:absolute;z-index:1001;pointer-events:none;transform:translate(-50%,-50%);width:14px;height:14px;border-radius:50%;background:transparent;border:2px solid #0f0;display:none;box-shadow:0 0 6px currentColor;}
+
+/* ---------- Bottom stack: historical detections + robots ---------- */
+#bottom-stack{flex:none;display:flex;flex-direction:column;overflow:hidden;border-top:1px solid #222;background:#0a0a0a;}
+#data-panel{flex:0 0 300px;min-height:0;background:#0d0d0d;display:flex;flex-direction:column;overflow:hidden;}
+#data-header{display:flex;justify-content:space-between;align-items:center;padding:8px 16px;background:#111;border-bottom:1px solid #222;min-height:40px;}
+#data-header h3{font-size:13px;color:#0f0;letter-spacing:1px;}
+#detection-count{font-size:11px;color:#888;}
+#table-container{flex:1;overflow-y:auto;}
+#table-container::-webkit-scrollbar{width:6px;}
+#table-container::-webkit-scrollbar-thumb{background:#333;border-radius:3px;}
+table{width:100%;border-collapse:collapse;font-size:12px;}
+thead{position:sticky;top:0;z-index:1;}
+th{background:#1a1a2e;color:#0f0;padding:8px 12px;text-align:left;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;font-size:11px;border-bottom:2px solid #333;white-space:nowrap;}
+td{padding:7px 12px;border-bottom:1px solid #1a1a1a;color:#bbb;white-space:nowrap;}
+tr:hover td{background:#1a1a1a;color:#fff;}
+tr.new-detection td{animation:flashRow 2s ease-out;}
+@keyframes flashRow{0%{background:#0a3a0a;color:#0f0;}100%{background:transparent;color:#bbb;}}
+#pagination{display:flex;justify-content:space-between;align-items:center;padding:8px 16px;background:#111;border-top:1px solid #222;min-height:40px;}
+#pagination span{font-size:11px;color:#888;}
+.page-btns{display:flex;gap:4px;}
+.page-btns button{background:#1a1a1a;border:1px solid #333;color:#ccc;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:11px;transition:all 0.2s;}
+.page-btns button:hover{border-color:#0f0;color:#0f0;}
+.page-btns button.active{background:#0f0;color:#000;border-color:#0f0;}
+.page-btns button:disabled{opacity:0.3;cursor:not-allowed;}
+
+/* ---------- Robots table panel ---------- */
+#robots-panel{flex:none;height:320px;min-height:0;background:#0c0c0c;display:flex;flex-direction:column;overflow:hidden;border-top:1px solid #222;}
+.panel-header{display:flex;justify-content:space-between;align-items:center;padding:8px 16px;background:#111;border-bottom:1px solid #222;min-height:40px;gap:8px;}
+.panel-header h3{font-size:13px;color:#0f0;letter-spacing:1px;}
+#robot-count,.tiny-note{font-size:11px;color:#888;}
+#robots-table-wrap{flex:1;overflow-y:auto;}
+#robots-table-wrap::-webkit-scrollbar{width:6px;}
+#robots-table-wrap::-webkit-scrollbar-thumb{background:#333;border-radius:3px;}
+.rob-actions{display:flex;gap:4px;}
+.rob-actions button{background:#1a1a1a;border:1px solid #333;color:#ccc;padding:3px 8px;border-radius:3px;cursor:pointer;font-size:10px;transition:all 0.2s;}
+.rob-actions button:hover{border-color:#0f0;color:#0f0;}
+.dot-on{display:inline-block;width:8px;height:8px;border-radius:50%;background:#0f0;box-shadow:0 0 6px #0f0;}
+.dot-off{display:inline-block;width:8px;height:8px;border-radius:50%;background:#555;}
+td.robot-name{cursor:pointer;color:#0f0;font-weight:600;}
+td.robot-name:hover{text-decoration:underline;}
+
+/* ---------- Robots page ---------- */
+#robotsView .toolbar{display:flex;justify-content:space-between;align-items:center;padding:12px 20px;background:#111;border-bottom:1px solid #222;gap:10px;flex-wrap:wrap;}
+#robotsView .toolbar h2{font-size:15px;color:#0f0;letter-spacing:1px;}
+#robotsView .toolbar .btn{width:auto;}
+#robots-page-wrap{flex:1;overflow:auto;padding:20px;}
+#robots-page-wrap table th{background:#1a1a2e;}
+.info-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:16px;}
+.info-box{background:#111;border:1px solid #222;border-radius:6px;padding:12px;}
+.info-box h4{font-size:11px;color:#0f0;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;}
+.info-box pre{background:#0a0a14;border:1px solid #1a1a1a;border-radius:4px;padding:8px;font-size:10px;color:#aaa;overflow-x:auto;white-space:pre-wrap;word-break:break-all;line-height:1.6;margin-top:4px;}
+.info-box code{background:#1a1a2e;padding:2px 6px;border-radius:3px;font-size:11px;color:#0f0;}
+
+/* ---------- Modal ---------- */
+#modalOverlay,#camOverlay{position:fixed;inset:0;background:rgba(0,0,0,0.75);display:none;align-items:center;justify-content:center;z-index:2000;}
+#camOverlay{z-index:2100;}
+/* ---------- Lesson viewer ---------- */
+#lessonOverlay{position:fixed;inset:0;background:rgba(0,0,0,0.85);display:none;align-items:center;justify-content:center;z-index:2200;padding:20px;}
+#lessonOverlay .modal-wide{background:#111;border:1px solid #333;border-radius:8px;width:min(1200px,96vw);height:92vh;display:flex;flex-direction:column;padding:0;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,0.6);}
+#lessonOverlay .modal-head{display:flex;justify-content:space-between;align-items:center;padding:8px 16px;border-bottom:1px solid #222;background:#111;flex:none;}
+#lessonOverlay .modal-head b{color:#0f0;font-size:13px;letter-spacing:1px;text-transform:uppercase;}
+#lessonFrame{flex:1;width:100%;border:0;background:#0a0a0f;}
+#sidebar-footer{padding:12px 20px;border-top:1px solid #222;background:#0d0d0d;margin-top:auto;}
+.modal{background:#111;border:1px solid #333;border-radius:8px;width:min(560px,94vw);max-height:90vh;overflow:auto;padding:20px;box-shadow:0 10px 40px rgba(0,0,0,0.6);}
+.modal h2{color:#0f0;font-size:15px;letter-spacing:1px;margin-bottom:14px;text-transform:uppercase;}
+.modal .btn-pair{margin-top:16px;}
+#camImg{width:100%;max-height:70vh;background:#000;border:1px solid #333;border-radius:6px;}
+.robot-tooltip{background:#111;border:1px solid #0f0;color:#0f0;font-size:10px;}
+
+/* ---------- Color / theme toggles ---------- */
+.color-toggle{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+.color-opt{width:28px;height:28px;border-radius:50%;cursor:pointer;border:3px solid transparent;transition:all 0.2s;}
+.color-opt:hover{transform:scale(1.15);}
+.color-opt.active{border-color:#fff;box-shadow:0 0 10px currentColor;}
+.color-green{background:#0f0;}
+.color-red{background:#f33;}
+.color-blue{background:#39f;}
+.theme-toggle{display:flex;gap:8px;}
+.theme-opt{flex:1;text-align:center;padding:7px 0;border-radius:4px;border:1px solid #333;cursor:pointer;font-size:11px;text-transform:uppercase;letter-spacing:1px;transition:all 0.2s;background:#1a1a1a;color:#aaa;}
+.theme-opt:hover{border-color:#0f0;color:#0f0;}
+.theme-opt.active{background:#0f0;color:#000;border-color:#0f0;}
+
+.instruction-box{background:#0a0a14;border:1px solid #222;border-radius:6px;padding:12px;margin-top:8px;}
+.instruction-box code{background:#1a1a2e;padding:2px 6px;border-radius:3px;font-size:11px;color:#0f0;}
+.instruction-box pre{background:#0a0a14;border:1px solid #1a1a1a;border-radius:4px;padding:8px;margin-top:6px;font-size:10px;color:#aaa;overflow-x:auto;white-space:pre-wrap;word-break:break-all;line-height:1.6;}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="sidebar">
+    <div class="sidebar-header">
+      <h1>&#x1F310; Дрон илрүүлэх систем</h1>
+      <div class="subtitle">Бодит цагийн илрүүлэлт &amp; хяналт</div>
+    </div>
+    <div class="nav-tabs">
+      <div class="nav-tab active" data-page="home" onclick="switchPage('home')">&#128225; Home</div>
+      <div class="nav-tab" data-page="robots" onclick="switchPage('robots')">&#129302; Robots</div>
+    </div>
+    <div class="robot-summary">Robots: <b id="sidebar-robot-summary">0 / 0 online</b></div>
+
+    <div class="section">
+      <div class="section-title">&#9881; Илрүүлэх зай</div>
+      <div class="field">
+        <label>Хамрах хүрээ (метер)</label>
+        <input type="number" id="rangeInput" value="5000" min="100" max="100000" step="100">
+      </div>
+      <div class="field">
+        <label>Хамрах хүрээний шатлал</label>
+        <select id="rangeRings">
+          <option value="3">3 тойрог</option>
+          <option value="4" selected>4 тойрог</option>
+          <option value="5">5 тойрог</option>
+          <option value="6">6 тойрог</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">&#128204; Радарын төв (газарын зураг)</div>
+      <div class="field">
+        <label>Latitude</label>
+        <input type="number" id="centerLat" value="47.91856696684756" step="0.0001">
+      </div>
+      <div class="field">
+        <label>Longitude</label>
+        <input type="number" id="centerLon" value="106.91779462330955" step="0.0001">
+      </div>
+      <button class="btn btn-primary" onclick="applyCenter()">Set Radar Center</button>
+    </div>
+
+    <div class="section">
+      <div class="section-title">&#127759; Газарын зураг</div>
+      <div class="field">
+        <label>Provider</label>
+        <select id="mapProvider">
+          <option value="carto" selected>CARTO (dark/light)</option>
+          <option value="osm">OpenStreetMap</option>
+          <option value="opentopo">OpenTopoMap</option>
+          <option value="esri">Esri Satellite</option>
+          <option value="google">Google Maps</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>API Key (CARTO / Google)</label>
+        <input type="text" id="mapApiKey" placeholder="optional">
+      </div>
+      <div id="cartoThemeWrap">
+        <div class="field">
+          <label>Theme (CARTO)</label>
+          <div class="theme-toggle">
+            <div class="theme-opt active" data-theme="dark" onclick="setMapTheme('dark')">Dark</div>
+            <div class="theme-opt" data-theme="light" onclick="setMapTheme('light')">Light</div>
+          </div>
+          <p style="font-size:10px;color:#888;line-height:1.6;margin-top:4px;">Dark theme acts as the black-background mode for the whole map (radar + robots).</p>
+        </div>
+      </div>
+      <div id="googleTypeWrap" style="display:none;">
+        <div class="field">
+          <label>Google Map Type</label>
+          <select id="googleType">
+            <option value="roadmap" selected>Roadmap</option>
+            <option value="satellite">Satellite</option>
+            <option value="hybrid">Hybrid</option>
+            <option value="terrain">Terrain</option>
+          </select>
+        </div>
+        <p style="font-size:10px;color:#888;line-height:1.6;">
+          Need a Google Maps JavaScript API key from
+          <code>console.cloud.google.com</code>.
+        </p>
+      </div>
+      <button class="btn btn-primary" onclick="applyMap()">Apply Map Settings</button>
+    </div>
+
+    <div class="section">
+      <div class="section-title">&#127912; Radar Appearance</div>
+      <div class="field">
+        <label>Color Theme</label>
+        <div class="color-toggle">
+          <div class="color-opt color-green" data-color="green" onclick="setColor('green')" title="Green"></div>
+          <div class="color-opt color-red" data-color="red" onclick="setColor('red')" title="Red"></div>
+          <div class="color-opt color-blue" data-color="blue" onclick="setColor('blue')" title="Blue"></div>
+          <span style="font-size:11px;color:#888;margin-left:8px" id="colorLabel">Classic Green</span>
+        </div>
+      </div>
+      <div class="field" style="display:flex;align-items:center;gap:10px;">
+        <label style="margin:0;font-size:11px;color:#888;text-transform:uppercase;letter-spacing:0.5px;">Custom Color</label>
+        <input type="color" id="customColor" value="#00ff00" style="width:40px;height:28px;border:none;background:transparent;cursor:pointer;padding:0;">
+        <button class="btn btn-secondary btn-sm" onclick="applyCustomColor()">Apply</button>
+        <button class="btn btn-secondary btn-sm" onclick="resetCustomColor()">Reset</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">&#128225; MQTT Configuration</div>
+      <div class="field">
+        <label>Broker Host (WebSocket)</label>
+        <input type="text" id="mqttHost" value="localhost" placeholder="e.g. localhost">
+      </div>
+      <div class="field">
+        <label>Port</label>
+        <input type="number" id="mqttPort" value="8080" placeholder="8080">
+      </div>
+      <div class="field">
+        <label>Topic</label>
+        <input type="text" id="mqttTopic" value="radar/detections" placeholder="radar/detections">
+      </div>
+      <div class="field">
+        <label>Client ID</label>
+        <input type="text" id="mqttClientId" value="radar-web-001" placeholder="optional">
+      </div>
+      <div class="btn-pair">
+        <button class="btn btn-primary" id="connectBtn" onclick="toggleMQTT()">Connect</button>
+        <button class="btn btn-secondary" onclick="simulateData()">&#9654; Simulate</button>
+      </div>
+      <div style="margin-top:8px;">
+        <button class="btn btn-secondary" onclick="useLocalServer()">&#128268; Use local Node.js broker</button>
+      </div>
+      <div style="margin-top:8px;font-size:11px;">
+        <span class="status-dot status-disconnected" id="statusDot"></span>
+        <span id="statusText">Disconnected</span>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">&#128221; MQTT Data Format</div>
+      <div class="instruction-box">
+        <p style="font-size:11px;color:#aaa;margin-bottom:8px;">Radar detections -> topic: <code id="topicDisplay">radar/detections</code></p>
+        <pre>{
+  "datetime": "2026-09-10 14:30:00",
+  "lat": 47.9077,
+  "long": 106.8832,
+  "altitude": 500,
+  "speed": 120,
+  "direction": 45,
+  "object_name": "aircraft-01"
+}</pre>
+      </div>
+      <div class="instruction-box" style="margin-top:8px;">
+        <p style="font-size:11px;color:#aaa;margin-bottom:8px;">Android robot sensor data -> topic: <code>robots/&#60;name&#62;/status</code></p>
+        <pre>{
+  "name": "robot-1",
+  "lat": 47.9077, "long": 106.8832,
+  "battery": 86, "voltage": 3.9,
+  "accel": [0.0, 9.8, 0.2],
+  "gyro": [0.1, 0.0, -0.3],
+  "heading": 90,
+  "ts": 1757482200000
+}</pre>
+      </div>
+      <div class="instruction-box" style="margin-top:8px;">
+        <p style="font-size:11px;color:#aaa;margin-bottom:8px;">Robot radar (HLK-LD2415H via Arduino/OTG) -> topic: <code>robots/&#60;name&#62;/radar</code></p>
+        <pre>{
+  "name": "robot-1",
+  "state": 1,
+  "dist": 420,
+  "ena": 55,
+  "targets": [{"g":2,"d":420,"e":55}],
+  "ts": 1757482200000
+}</pre>
+      </div>
+      <div class="instruction-box" style="margin-top:8px;">
+        <p style="font-size:11px;color:#aaa;margin-bottom:6px;"><strong>Built-in Node.js broker (recommended):</strong></p>
+        <pre>npm install
+npm start</pre>
+        <p style="font-size:10px;color:#888;margin-top:4px;">Then open <code>http://localhost:8080</code> and click "Use local Node.js broker". No Mosquitto or internet needed.</p>
+      </div>
+    </div>
+
+    <div class="section" style="border-bottom:none;">
+      <div class="section-title">&#128203; Log</div>
+      <div id="logBox" style="background:#0a0a14;border:1px solid #1a1a1a;border-radius:4px;padding:8px;max-height:120px;overflow-y:auto;font-family:monospace;font-size:10px;color:#666;line-height:1.6;">
+        <div>System ready. Waiting for connections...</div>
+      </div>
+    </div>
+
+    <div id="sidebar-footer">
+      <button class="btn btn-secondary" onclick="openLesson()">&#128214; JS Lesson</button>
+    </div>
+  </div>
+
+  <div id="main">
+    <!-- ============ HOME VIEW ============ -->
+    <div id="homeView">
+      <div id="radar-container">
+        <div id="map"></div>
+        <canvas id="radarOverlay"></canvas>
+        <div id="centerPin"></div>
+        <div id="map-tools">
+          <button onclick="map.setView([state.center.lat, state.center.lon], map.getZoom() || 14)">&#x24D8; Center</button>
+          <button onclick="zoomRadar(true)">&#43; Zoom In</button>
+          <button onclick="zoomRadar(false)">&#8722; Zoom Out</button>
+        </div>
+        <div class="ticker" id="ticker"></div>
+        <div class="legend">
+          <span class="l-active">Active (&lt;30s)</span>
+          <span class="l-old">Older</span>
+          <span class="l-sweep">Sweep</span>
+        </div>
+      </div>
+
+      <div id="bottom-stack">
+        <div id="data-panel">
+          <div id="data-header">
+            <h3>&#128202; Historical Detections</h3>
+            <span id="detection-count">0 records</span>
+          </div>
+          <div id="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Date/Time</th>
+                  <th>Latitude</th>
+                  <th>Longitude</th>
+                  <th>Altitude (m)</th>
+                  <th>Speed (km/h)</th>
+                  <th>Direction (&deg;)</th>
+                  <th>Object Name</th>
+                </tr>
+              </thead>
+              <tbody id="tableBody"></tbody>
+            </table>
+          </div>
+          <div id="pagination">
+            <span id="pageInfo">Showing 1-20 of 0</span>
+            <div class="page-btns" id="pageBtns"></div>
+          </div>
+        </div>
+
+        <div id="robots-panel">
+          <div class="panel-header">
+            <h3>&#129302; Android Robots</h3>
+            <span id="robot-count">0 robots</span>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <span class="tiny-note">Click a robot row to configure</span>
+              <button class="btn btn-secondary btn-sm" onclick="switchPage('robots')">Manage &#8250;&#8250;</button>
+            </div>
+          </div>
+          <div id="robots-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Status</th>
+                  <th>Robot</th>
+                  <th>Latitude</th>
+                  <th>Longitude</th>
+                  <th>Battery</th>
+                  <th>Radar</th>
+                  <th>Camera</th>
+                  <th>Last Seen</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="rbodyHome"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ ROBOTS VIEW ============ -->
+    <div id="robotsView" class="page-hidden">
+      <div class="toolbar">
+        <h2>&#129302; Android Robots</h2>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-secondary" onclick="addRobotModal()">&#43; Add Robot</button>
+          <button class="btn btn-secondary" onclick="switchPage('home')">&#8592; Home</button>
+        </div>
+      </div>
+      <div id="robots-page-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Status</th>
+              <th>Robot</th>
+              <th>Latitude</th>
+              <th>Longitude</th>
+              <th>Battery</th>
+              <th>Radar</th>
+              <th>Camera</th>
+              <th>Last Seen</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="rbodyPage"></tbody>
+        </table>
+        <div class="info-grid">
+          <div class="info-box">
+            <h4>MQTT Topics</h4>
+            <p style="font-size:11px;color:#aaa;line-height:1.8;margin-bottom:4px;">Robots publish on:</p>
+            <code>robots/&lt;name&gt;/status</code><br>
+            <code>robots/&lt;name&gt;/radar</code>
+            <p style="font-size:11px;color:#aaa;line-height:1.8;margin-top:4px;">The web app subscribes to <code>robots/&#43;/&#42;</code> automatically.</p>
+          </div>
+          <div class="info-box">
+            <h4>Camera Streams</h4>
+            <p style="font-size:11px;color:#aaa;line-height:1.8;">Android robots upload JPEG frames to the Node.js server:</p>
+            <pre>POST /cam/&lt;name&gt;          (JPEG body)</pre>
+            <p style="font-size:11px;color:#aaa;line-height:1.8;">Live stream shown in the web app:</p>
+            <pre>/cam/&lt;name&gt;/mjpeg</pre>
+          </div>
+          <div class="info-box">
+            <h4>Robot Radar</h4>
+            <p style="font-size:11px;color:#aaa;line-height:1.8;">Each mini robot carries an Arduino + HLK-LD2415H radar over OTG USB. Detections are published on <code>robots/&lt;name&gt;/radar</code> and drawn on the Home map with the robot's own range rings (default 200&nbsp;m). Click a robot row to change range, rings, color, GPS usage and heading.</p>
+          </div>
+          <div class="info-box">
+            <h4>Registration</h4>
+            <p style="font-size:11px;color:#aaa;line-height:1.8;">Robots are added automatically as soon as they publish; you can also pre-register one with <b>&#43; Add Robot</b>. Registered robots survive a page reload (saved in the browser).</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ ROBOT CONFIG MODAL ============ -->
+<div id="modalOverlay" onclick="if(event.target===this)closeModal('modalOverlay')">
+  <div class="modal" id="configModal">
+    <h2 id="cfgTitle">Robot Settings</h2>
+    <div class="field">
+      <label>Robot Name</label>
+      <input type="text" id="cfgName" placeholder="robot-1">
+    </div>
+    <div class="field">
+      <label>Radar Range (meters)</label>
+      <input type="number" id="cfgRange" value="200" min="10" max="5000" step="10">
+    </div>
+    <div class="field">
+      <label>Range Rings</label>
+      <select id="cfgRings">
+        <option value="0">No rings</option>
+        <option value="2">2 rings</option>
+        <option value="3">3 rings</option>
+        <option value="4" selected>4 rings</option>
+        <option value="6">6 rings</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Radar Color</label>
+      <input type="color" id="cfgColor" value="#00ff00">
+    </div>
+    <div class="field">
+      <label><input type="checkbox" id="cfgUseGps" checked style="width:auto;margin-right:6px;">Use phone GPS for robot position</label>
+    </div>
+    <div class="field">
+      <label>Latitude (manual, if GPS disabled)</label>
+      <input type="number" id="cfgLat" step="0.000001">
+    </div>
+    <div class="field">
+      <label>Longitude (manual, if GPS disabled)</label>
+      <input type="number" id="cfgLon" step="0.000001">
+    </div>
+    <div class="field">
+      <label>Heading (deg, radar forward direction; 0=N. Leave 0 to use phone heading)</label>
+      <input type="number" id="cfgHeading" value="0" step="1">
+    </div>
+    <div class="btn-pair">
+      <button class="btn btn-primary" onclick="saveRobotConfig()">Save</button>
+      <button class="btn btn-secondary" onclick="centerMapOnRobot(currentCfgRobot)">&#128204; Center Map</button>
+      <button class="btn btn-danger" onclick="removeRobot(currentCfgRobot)">&#128465; Remove</button>
+    </div>
+    <div style="margin-top:12px;">
+      <button class="btn btn-secondary" onclick="closeModal('modalOverlay')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ CAMERA MODAL ============ -->
+<div id="camOverlay" onclick="if(event.target===this)closeCam()">
+  <div class="modal" style="width:min(860px,96vw);">
+    <h2 id="camTitle">Camera</h2>
+    <img id="camImg" src="" alt="camera">
+    <div style="margin-top:12px;">
+      <button class="btn btn-secondary" onclick="closeCam()">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/************ State ************/
+const state = {
+  detections: [],
+  blips: [],
+  maxRange: 5000,
+  rangeRings: 4,
+  colorTheme: 'green',
+  mapTheme: 'dark',
+  mapProvider: 'carto',
+  customColor: '#00ff00',
+  center: { lat: 47.91856696684756, lon: 106.91779462330955 },
+  sweepAngle: 0,
+  currentPage: 1,
+  perPage: 20,
+  mqttConnected: false,
+  mqttClient: null,
+  simInterval: null,
+  robots: {},      // name -> robot runtime object
+  robotCfg: {}     // name -> persisted config {range, rings, color, useGps, heading, lat, lon}
+};
+let currentCfgRobot = null;
+
+const colors = {
+  green: { primary:'#0f0', dim:'#0a0', faint:'rgba(0,255,0,0.35)', sweep:'rgba(0,255,0,', text:'#0f0', label:'Classic Green' },
+  red:   { primary:'#f33', dim:'#a00', faint:'rgba(255,51,51,0.35)', sweep:'rgba(255,51,51,', text:'#f33', label:'Tactical Red' },
+  blue:  { primary:'#39f', dim:'#06c', faint:'rgba(51,153,255,0.35)', sweep:'rgba(51,153,255,', text:'#39f', label:'Stealth Blue' }
+};
+
+/************ Page switching ************/
+function switchPage(which) {
+  document.getElementById('homeView').classList.toggle('page-hidden', which !== 'home');
+  document.getElementById('robotsView').classList.toggle('page-hidden', which !== 'robots');
+  document.querySelectorAll('.nav-tab').forEach(el => el.classList.toggle('active', el.dataset.page === which));
+  if (which === 'home') {
+    requestAnimationFrame(function () { map.invalidateSize(); });
+  }
+}
+
+/************ Leaflet map ************/
+const map = L.map('map', { zoomControl: false, attributionControl: false }).setView([state.center.lat, state.center.lon], 14);
+const osmAttrib = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+
+const PROVIDER_TEMPLATES = {
+  osm: {
+    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attr: osmAttrib,
+    max: 19,
+    subdomains: 'abc'
+  },
+  opentopo: {
+    url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+    attr: 'Map data &copy; OpenStreetMap contributors, SRTM | Style &copy; OpenTopoMap (CC-BY-SA)',
+    max: 17,
+    subdomains: 'abc'
+  },
+  esri: {
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    attr: 'Tiles &copy; Esri — Source: Esri, Maxar, Earthstar Geographics',
+    max: 19,
+    subdomains: 'abc'
+  }
+};
+
+let mapLayer = null;      // plain tile layer (OSM / OpenTopo / Esri)
+let googleLayer = null;   // GoogleMutant layer
+let cartoDark = null;
+let cartoLight = null;
+
+function setMapTheme(theme) {
+  state.mapTheme = theme;
+  document.querySelectorAll('.theme-opt').forEach(el => el.classList.toggle('active', el.dataset.theme === theme));
+  if (cartoDark && cartoLight) {
+    cartoDark.setOpacity(theme === 'dark' ? 1 : 0);
+    cartoLight.setOpacity(theme === 'light' ? 1 : 0);
+    if (!map.hasLayer(cartoDark)) map.addLayer(cartoDark);
+    if (!map.hasLayer(cartoLight)) map.addLayer(cartoLight);
+  }
+  updateCenterPin();
+}
+
+function clearMapLayers() {
+  if (mapLayer) { map.removeLayer(mapLayer); mapLayer = null; }
+  if (googleLayer) { map.removeLayer(googleLayer); googleLayer = null; }
+  if (cartoDark) { map.removeLayer(cartoDark); cartoDark = null; }
+  if (cartoLight) { map.removeLayer(cartoLight); cartoLight = null; }
+}
+
+function loadGoogleApi(key) {
+  return new Promise(function (resolve, reject) {
+    if (window.google && window.google.maps && window.google.maps.Map) { resolve(); return; }
+    const cb = '__gmaps_cb_' + Math.random().toString(36).slice(2, 9);
+    window[cb] = function () { delete window[cb]; clearTimeout(timeout); resolve(); };
+    const s = document.createElement('script');
+    s.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(key || '') + '&v=3.exp&callback=' + cb;
+    s.async = true;
+    s.onerror = function () { delete window[cb]; clearTimeout(timeout); reject(new Error('Google Maps API script failed to load')); };
+    const timeout = setTimeout(function () { delete window[cb]; reject(new Error('Google Maps API load timeout')); }, 15000);
+    document.head.appendChild(s);
+  });
+}
+
+async function applyMap() {
+  const provider = document.getElementById('mapProvider').value;
+  const key = document.getElementById('mapApiKey').value.trim();
+  const gType = document.getElementById('googleType').value;
+  state.mapProvider = provider;
+
+  clearMapLayers();
+
+  document.getElementById('cartoThemeWrap').style.display = provider === 'carto' ? '' : 'none';
+  document.getElementById('googleTypeWrap').style.display = provider === 'google' ? '' : 'none';
+
+  if (provider === 'carto') {
+    const kq = key ? '?api_key=' + encodeURIComponent(key) : '';
+    cartoDark = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png' + kq,
+      { attribution: osmAttrib + ' &copy; <a href="https://carto.com/">CARTO</a>', maxZoom: 20 });
+    cartoLight = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png' + kq,
+      { attribution: osmAttrib + ' &copy; <a href="https://carto.com/">CARTO</a>', maxZoom: 20 });
+    setMapTheme(state.mapTheme);
+    log('Map: CARTO (' + (key ? 'key set' : 'no key') + ', theme ' + state.mapTheme + ')');
+  } else if (provider === 'google') {
+    if (!key) {
+      log('Google Maps requires an API key; enter it in the Map section.');
+    }
+    try {
+      await loadGoogleApi(key);
+      if (!window.google || !window.google.maps || !window.google.maps.Map) {
+        throw new Error('Google Maps API not available');
+      }
+    } catch (e) {
+      log('Google Maps: ' + e.message);
+      // fall back to OSM so the map still works
+      mapLayer = L.tileLayer(PROVIDER_TEMPLATES.osm.url,
+        { attribution: PROVIDER_TEMPLATES.osm.attr, maxZoom: PROVIDER_TEMPLATES.osm.max });
+      mapLayer.addTo(map);
+      log('Map: fell back to OpenStreetMap.');
+      return;
+    }
+    try {
+      googleLayer = L.gridLayer.googleMutant({ type: gType, maxZoom: 21, maxNativeZoom: 21 });
+      googleLayer.addTo(map);
+      log('Map: Google Maps (' + gType + ')');
+    } catch (e) {
+      log('Google Mutant error: ' + e.message);
+    }
+  } else {
+    const def = PROVIDER_TEMPLATES[provider];
+    mapLayer = L.tileLayer(def.url,
+      { attribution: def.attr, maxZoom: def.max, subdomains: def.subdomains });
+    mapLayer.addTo(map);
+    log('Map: ' + provider + ' selected.');
+  }
+}
+
+let centerPinVisible = true;
+function updateCenterPin() {
+  const el = document.getElementById('centerPin');
+  const c = getC();
+  el.style.borderColor = c.primary;
+  el.style.display = 'block';
+}
+
+/************ Radar overlay canvas ************/
+const canvas = document.getElementById('radarOverlay');
+const ctx = canvas.getContext('2d');
+let dpr = Math.min(window.devicePixelRatio || 1, 2);
+let cw, ch;
+
+function resizeOverlay() {
+  const container = document.getElementById('radar-container');
+  if (container.clientWidth === 0 || container.clientHeight === 0) return;
+  cw = container.clientWidth;
+  ch = container.clientHeight;
+  canvas.width = cw * dpr;
+  canvas.height = ch * dpr;
+  canvas.style.width = cw + 'px';
+  canvas.style.height = ch + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function metersToDeg(m) { return m / 111320; }
+
+function hexToRgb(hex) {
+  const h = hex.replace('#', '');
+  const f = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
+  const n = parseInt(f, 16);
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+
+function makeColorSet(hex, label) {
+  const { r, g, b } = hexToRgb(hex);
+  return {
+    primary: hex,
+    dim: 'rgba(' + r + ',' + g + ',' + b + ',0.65)',
+    faint: 'rgba(' + r + ',' + g + ',' + b + ',0.35)',
+    sweep: 'rgba(' + r + ',' + g + ',' + b + ',',
+    text: hex,
+    label: label
+  };
+}
+
+function getC() {
+  if (state.colorTheme === 'custom') return makeColorSet(state.customColor, 'Custom');
+  return colors[state.colorTheme];
+}
+
+function drawRadar() {
+  if (!cw || !ch) return;
+  const c = getC();
+  ctx.clearRect(0, 0, cw, ch);
+
+  // Radar center on screen
+  const cPx = map.latLngToContainerPoint([state.center.lat, state.center.lon]);
+  const cx = cPx.x, cy = cPx.y;
+
+  // Pixel radius for current range at this zoom
+  const north = map.latLngToContainerPoint([state.center.lat + metersToDeg(state.maxRange), state.center.lon]);
+  const R = Math.hypot(north.x - cx, north.y - cy);
+  if (R < 8) return; // too zoomed out; nothing drawable
+
+  // Center pin DOM element follows
+  const pin = document.getElementById('centerPin');
+  pin.style.left = cx + 'px';
+  pin.style.top = cy + 'px';
+  const cc = getC();
+  pin.style.borderColor = cc.primary;
+  pin.style.display = 'block';
+
+  ctx.save();
+  // Circular clip so radar never paints over map outside its range
+  ctx.beginPath();
+  ctx.arc(cx, cy, R, 0, Math.PI * 2);
+  ctx.clip();
+
+  // Subtle dark tint so the radar reads well on both themes
+  ctx.fillStyle = state.mapTheme === 'dark' ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.22)';
+  ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
+
+  // Sweep trail (wedge behind the sweep line)
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.arc(cx, cy, R, state.sweepAngle - 0.6, state.sweepAngle, false);
+  ctx.closePath();
+  ctx.fillStyle = c.sweep + '0.07)';
+  ctx.fill();
+
+  // Range rings + labels
+  ctx.strokeStyle = c.faint;
+  ctx.lineWidth = 1;
+  for (let i = 1; i <= state.rangeRings; i++) {
+    const r = (R / state.rangeRings) * i;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.stroke();
+    const val = Math.round((state.maxRange / state.rangeRings) * i);
+    ctx.fillStyle = c.dim;
+    ctx.font = '9px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(val >= 1000 ? (val/1000).toFixed(1) + 'km' : val + 'm', cx + 2, cy - r + 10);
+  }
+
+  // Cross lines (N-S, E-W)
+  ctx.strokeStyle = c.sweep + '0.25)';
+  ctx.lineWidth = 0.7;
+  ctx.beginPath(); ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy + R); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx - R, cy); ctx.lineTo(cx + R, cy); ctx.stroke();
+
+  // Direction labels
+  ctx.fillStyle = c.text;
+  ctx.font = 'bold 11px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('N', cx, cy - R - 12);
+  ctx.fillText('S', cx, cy + R + 14);
+  ctx.fillText('E', cx + R + 12, cy);
+  ctx.fillText('W', cx - R - 12, cy);
+
+  // Sweep line
+  const sweepX = cx + Math.cos(state.sweepAngle) * R;
+  const sweepY = cy + Math.sin(state.sweepAngle) * R;
+  const sweepGrad = ctx.createLinearGradient(cx, cy, sweepX, sweepY);
+  sweepGrad.addColorStop(0, c.sweep + '0.05)');
+  sweepGrad.addColorStop(1, c.sweep + '0.85)');
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(sweepX, sweepY);
+  ctx.strokeStyle = sweepGrad;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Center dot
+  ctx.beginPath();
+  ctx.arc(cx, cy, 3, 0, Math.PI * 2);
+  ctx.fillStyle = c.primary;
+  ctx.fill();
+
+  // Blips
+  const now = Date.now();
+  state.blips.forEach(blip => {
+    const age = (now - blip.time) / 1000;
+    const fade = age < 5 ? 1 : age < 30 ? 1 - (age - 5) / 25 : 0;
+    if (fade <= 0) return;
+
+    const dist = (blip.distance / state.maxRange) * R;
+    if (dist > R) return;
+    const px = cx + Math.cos((blip.direction - 90) * Math.PI / 180) * dist;
+    const py = cy + Math.sin((blip.direction - 90) * Math.PI / 180) * dist;
+
+    ctx.beginPath();
+    ctx.arc(px, py, 7, 0, Math.PI * 2);
+    ctx.fillStyle = c.sweep + (0.15 * fade) + ')';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(px, py, 3, 0, Math.PI * 2);
+    ctx.fillStyle = c.sweep + fade + ')';
+    ctx.fill();
+    if (fade > 0.5) {
+      ctx.fillStyle = c.sweep + (fade * 0.85) + ')';
+      ctx.font = '9px monospace';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(blip.name, px + 8, py + 3);
+    }
+  });
+
+  ctx.restore();
+
+  // Live robot positions (thin dots) so the home view shows robot radars too
+  Object.keys(state.robots).forEach(function (n) {
+    const r = state.robots[n];
+    const c2 = robotLatLon(r);
+    if (!c2) return;
+    const p = map.latLngToContainerPoint(c2);
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = r.color || '#0f0';
+    ctx.globalAlpha = isRobotOnline(r) ? 1 : 0.4;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  });
+}
+
+function zoomRadar(inDir) {
+  const z = map.getZoom();
+  map.setView([state.center.lat, state.center.lon], inDir ? z + 1 : z - 1);
+}
+
+map.on('move', drawRadar);
+map.on('zoom', drawRadar);
+map.on('resize', resizeOverlay);
+
+let lastTime = 0;
+function animate(ts) {
+  const dt = (ts - lastTime) / 1000 || 0.016;
+  lastTime = ts;
+  state.sweepAngle += dt * 1.2;
+  if (state.sweepAngle > Math.PI * 2) state.sweepAngle -= Math.PI * 2;
+  drawRadar();
+  requestAnimationFrame(animate);
+}
+
+function applyCenter() {
+  const lat = parseFloat(document.getElementById('centerLat').value);
+  const lon = parseFloat(document.getElementById('centerLon').value);
+  if (isNaN(lat) || isNaN(lon)) { log('Invalid center coordinates.'); return; }
+  state.center = { lat: lat, lon: lon };
+  map.setView([lat, lon], map.getZoom());
+  log('Radar center set to ' + lat.toFixed(6) + ', ' + lon.toFixed(6));
+}
+
+/************ Detections & table ************/
+function calcDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function addDetection(data) {
+  const id = state.detections.length + 1;
+  const record = {
+    id,
+    datetime: data.datetime || new Date().toISOString().replace('T',' ').slice(0,19),
+    lat: parseFloat(data.lat) || 0,
+    long: parseFloat(data.long) || 0,
+    altitude: parseFloat(data.altitude) || 0,
+    speed: parseFloat(data.speed) || 0,
+    direction: parseFloat(data.direction) || 0,
+    object_name: data.object_name || 'unknown'
+  };
+  state.detections.unshift(record);
+
+  // Distance from radar center, not from previous detection
+  const distance = calcDistance(state.center.lat, state.center.lon, record.lat, record.long);
+
+  state.blips.push({
+    name: record.object_name,
+    distance: distance,
+    direction: (record.direction + 90) % 360,  // bearing 0=N => radar angle starts at N
+    lat: record.lat,
+    long: record.long,
+    time: Date.now(),
+    altitude: record.altitude
+  });
+  if (state.blips.length > 200) state.blips.shift();
+
+  renderTable();
+  document.getElementById('detection-count').textContent = state.detections.length + ' records';
+  log('Detection: ' + record.object_name + ' @ ' + record.direction + '\u00B0, ' + Math.round(record.altitude) + 'm');
+}
+
+function renderTable() {
+  const tbody = document.getElementById('tableBody');
+  const total = state.detections.length;
+  const totalPages = Math.max(1, Math.ceil(total / state.perPage));
+  if (state.currentPage > totalPages) state.currentPage = totalPages;
+  const start = (state.currentPage - 1) * state.perPage;
+  const end = Math.min(start + state.perPage, total);
+  const page = state.detections.slice(start, end);
+
+  tbody.innerHTML = '';
+  page.forEach((d, i) => {
+    const tr = document.createElement('tr');
+    if (i === 0) tr.className = 'new-detection';
+    tr.innerHTML = `<td>${start + i + 1}</td><td>${d.datetime}</td><td>${d.lat.toFixed(6)}</td><td>${d.long.toFixed(6)}</td><td>${d.altitude}</td><td>${d.speed}</td><td>${d.direction}</td><td>${d.object_name}</td>`;
+    tbody.appendChild(tr);
+  });
+
+  document.getElementById('pageInfo').textContent = total === 0 ? 'No records' : `Showing ${start+1}-${end} of ${total}`;
+  renderPagination(totalPages);
+}
+
+function renderPagination(total) {
+  const btns = document.getElementById('pageBtns');
+  btns.innerHTML = '';
+  const addBtn = (text, pg, disabled) => {
+    const b = document.createElement('button');
+    b.textContent = text;
+    b.disabled = disabled;
+    b.className = pg === state.currentPage ? 'active' : '';
+    b.onclick = () => { state.currentPage = pg; renderTable(); };
+    btns.appendChild(b);
+  };
+  addBtn('\u00AB', state.currentPage - 1, state.currentPage <= 1);
+  const maxShow = 7;
+  let s = Math.max(1, state.currentPage - 3);
+  let e = Math.min(total, s + maxShow - 1);
+  s = Math.max(1, e - maxShow + 1);
+  if (s > 1) addBtn('1', 1, false);
+  if (s > 2) { const d = document.createElement('button'); d.textContent = '...'; d.disabled = true; btns.appendChild(d); }
+  for (let i = s; i <= e; i++) addBtn(i, i, false);
+  if (e < total - 1) { const d = document.createElement('button'); d.textContent = '...'; d.disabled = true; btns.appendChild(d); }
+  if (e < total) addBtn(total, total, false);
+  addBtn('\u00BB', state.currentPage + 1, state.currentPage >= total);
+}
+
+function setColor(c) {
+  state.colorTheme = c;
+  document.querySelectorAll('.color-opt').forEach(el => el.classList.toggle('active', el.dataset.color === c));
+  document.getElementById('colorLabel').textContent = colors[c].label;
+  updateCenterPin();
+}
+
+function applyCustomColor() {
+  const hex = document.getElementById('customColor').value;
+  state.colorTheme = 'custom';
+  state.customColor = hex;
+  document.querySelectorAll('.color-opt').forEach(el => el.classList.remove('active'));
+  document.getElementById('colorLabel').textContent = 'Custom';
+  updateCenterPin();
+  log('Custom color applied: ' + hex);
+}
+
+function resetCustomColor() {
+  document.getElementById('customColor').value = '#00ff00';
+  setColor('green');
+  updateCenterPin();
+  log('Radar color reset to Classic Green.');
+}
+
+// Live preview while dragging the color picker
+document.addEventListener('input', function(e) {
+  if (e.target && e.target.id === 'customColor') {
+    state.colorTheme = 'custom';
+    state.customColor = e.target.value;
+    document.querySelectorAll('.color-opt').forEach(el => el.classList.remove('active'));
+    document.getElementById('colorLabel').textContent = 'Custom';
+    updateCenterPin();
+  }
+});
+
+function log(msg) {
+  const box = document.getElementById('logBox');
+  const t = new Date().toLocaleTimeString();
+  const div = document.createElement('div');
+  div.textContent = '[' + t + '] ' + msg;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+/************ Android robots ************/
+function loadRobotCfg() {
+  try {
+    const s = localStorage.getItem('radar_robot_cfg');
+    if (s) state.robotCfg = JSON.parse(s);
+  } catch (e) { /* ignore */ }
+}
+function saveRobotCfg() {
+  try { localStorage.setItem('radar_robot_cfg', JSON.stringify(state.robotCfg)); } catch (e) { /* ignore */ }
+}
+
+function defaultCfg() {
+  return { range: 200, rings: 4, color: '#00ff00', useGps: true, heading: 0, lat: null, lon: null };
+}
+
+function ensureRobot(name) {
+  if (!state.robots[name]) {
+    const cfg = Object.assign(defaultCfg(), state.robotCfg[name] || {});
+    state.robots[name] = {
+      name: name,
+      online: false,
+      lastStatus: null,
+      lastStatusTime: 0,
+      lastRadar: null,
+      lastRadarTime: 0,
+      range: cfg.range,
+      rings: cfg.rings,
+      color: cfg.color,
+      useGps: cfg.useGps !== false,
+      headingManual: cfg.heading || 0,
+      lat: cfg.lat,
+      lon: cfg.lon,
+      sig: null,
+      layers: null
+    };
+  }
+  return state.robots[name];
+}
+
+function isRobotOnline(r) {
+  return !!r.lastStatusTime && (Date.now() - r.lastStatusTime) < 12000;
+}
+
+function robotLatLon(r) {
+  const lat = parseFloat(r.lat);
+  const lon = parseFloat(r.lon);
+  if (!isNaN(lat) && !isNaN(lon)) return [lat, lon];
+  return null;
+}
+
+function robotHeading(r) {
+  const manual = parseFloat(r.headingManual);
+  if (manual && !isNaN(manual)) return manual;
+  const h = r.lastStatus && parseFloat(r.lastStatus.heading);
+  return (!isNaN(h) && h !== null && h !== undefined) ? h : 0;
+}
+
+function llDest(lat, lon, bearingDeg, distM) {
+  const R = 6371000;
+  const d = distM / R;
+  const brng = bearingDeg * Math.PI / 180;
+  const la1 = lat * Math.PI / 180;
+  const lo1 = lon * Math.PI / 180;
+  const la2 = Math.asin(Math.sin(la1) * Math.cos(d) + Math.cos(la1) * Math.sin(d) * Math.cos(brng));
+  const lo2 = lo1 + Math.atan2(Math.sin(brng) * Math.sin(d) * Math.cos(la1), Math.cos(d) - Math.sin(la1) * Math.sin(la2));
+  return [la2 * 180 / Math.PI, lo2 * 180 / Math.PI];
+}
+
+function openLesson() {
+  const ov = document.getElementById('lessonOverlay');
+  const fr = document.getElementById('lessonFrame');
+  if (!fr.src || fr.src.indexOf('js-lesson/index.html') === -1) fr.src = 'js-lesson/index.html';
+  ov.style.display = 'flex';
+  log('Lesson viewer opened (js-lesson).');
+}
+function closeLesson() {
+  const ov = document.getElementById('lessonOverlay');
+  if (ov) ov.style.display = 'none';
+}
+function clearRobotLayers(name) {
+  const r = state.robots[name];
+  if (r && r.layers && r.layers.group) { map.removeLayer(r.layers.group); }
+  if (r) r.layers = null;
+  if (r) r.sig = null;
+}
+
+function drawRobotOnMap(name) {
+  const r = state.robots[name];
+  if (!r) return;
+  const c = robotLatLon(r);
+  if (!c) return;
+  const range = Math.max(10, parseFloat(r.range) || 200);
+  const rings = parseInt(r.rings, 10) || 0;
+  const color = r.color || '#00ff00';
+  const heading = robotHeading(r);
+  const targets = (r.lastRadar && Array.isArray(r.lastRadar.targets)) ? r.lastRadar.targets : [];
+  const tSig = targets.map(t => (t.d || 0) + '/' + (t.e || 0) + '/' + (t.g || 0)).join(',');
+  const sig = c[0].toFixed(5) + ',' + c[1].toFixed(5) + ',' + range + ',' + rings + ',' + color + ',' +
+    heading.toFixed(0) + ',' + tSig + ',' + (r.lastRadar ? (r.lastRadar.state || 0) : 0);
+  if (r.sig === sig) return;
+  r.sig = sig;
+
+  clearRobotLayers(name);
+  const lat = c[0], lon = c[1];
+  const group = L.layerGroup();
+
+  // Range circle
+  L.circle([lat, lon], { radius: range, color: color, weight: 1, opacity: 0.55, fillColor: color, fillOpacity: 0.04 })
+    .addTo(group);
+
+  // Range rings
+  if (rings > 1) {
+    for (let i = 1; i < rings; i++) {
+      L.circle([lat, lon], { radius: (range / rings) * i, color: color, weight: 0.6, opacity: 0.25, fill: false })
+        .addTo(group);
+    }
+  }
+
+  // Heading indicator (direction the robot radar faces)
+  const hd = llDest(lat, lon, heading, Math.max(12, range * 0.05));
+  L.polyline([[lat, lon], hd], { color: color, weight: 1.5, opacity: 0.8, dashArray: '4,4' }).addTo(group);
+
+  // Radar detections (LD2415H reports range only, no bearing -> shown ahead + radial band)
+  if (r.lastRadar && (r.lastRadar.state || 0) !== 0 && targets.length) {
+    targets.forEach(function (t) {
+      const d = parseFloat(t.d) || 0;
+      if (d <= 0) return;
+      const pos = llDest(lat, lon, heading, d);
+      const e = Math.min(255, parseInt(t.e, 10) || 0);
+      const opc = 0.3 + 0.7 * (e / 255);
+      L.circle(pos, {
+        radius: Math.max(8, d * 0.04), color: color, weight: 1, opacity: 0.9,
+        fillColor: color, fillOpacity: opc * 0.6
+      }).bindTooltip((t.g != null ? 'gate ' + t.g + ' · ' : '') + Math.round(d) + 'm · e' + e, { className: 'robot-tooltip', sticky: true })
+        .addTo(group);
+      // radial ambiguity band at this range
+      L.circle([lat, lon], { radius: d, color: color, weight: 0.6, opacity: 0.18, dashArray: '2,6', fill: false })
+        .addTo(group);
+    });
+  }
+
+  // Center marker
+  const mk = L.circleMarker([lat, lon], { radius: 5, color: '#fff', weight: 2, fillColor: color, fillOpacity: 1 });
+  mk.bindTooltip(r.name + (isRobotOnline(r) ? ' (online)' : ' (offline)'), { className: 'robot-tooltip' });
+  mk.addTo(group);
+
+  group.addTo(map);
+  r.layers = { group: group, center: mk };
+}
+
+function handleRobotMsg(topic, payload) {
+  const m = /^robots\/([^/]+)\/(status|radar)$/.exec(topic);
+  if (!m) return;
+  const name = m[1];
+  let data;
+  try { data = JSON.parse(payload); } catch (e) { return; }
+
+  const r = ensureRobot(name);
+  if (m[2] === 'status') {
+    r.lastStatus = data;
+    r.lastStatusTime = Date.now();
+    r.online = true;
+    if (r.useGps !== false) {
+      const la = parseFloat(data.lat), lo = parseFloat(data.long);
+      if (!isNaN(la) && !isNaN(lo)) { r.lat = la; r.lon = lo; }
+    }
+  } else {
+    r.lastRadar = data;
+    r.lastRadarTime = Date.now();
+    const d = data && parseFloat(data.dist);
+    if (d && !isNaN(d)) {
+      log('Robot ' + name + ' radar: ' + Math.round(d) + 'm (state ' + (data.state || 0) + ')');
+    }
+  }
+
+  drawRobotOnMap(name);
+  renderRobotsTables();
+}
+
+function fmtCoord(v) {
+  const n = parseFloat(v);
+  return (!isNaN(n)) ? n.toFixed(6) : '\u2014';
+}
+function fmtTime(ts) {
+  if (!ts) return '\u2014';
+  const d = new Date(ts);
+  return d.toLocaleTimeString();
+}
+
+function robotRowHtml(r) {
+  const on = isRobotOnline(r);
+  const dot = '<span class="' + (on ? 'dot-on' : 'dot-off') + '"></span>';
+  const radar = r.lastRadar ? ((r.lastRadar.state || 0) !== 0 ? (Math.round(parseFloat(r.lastRadar.dist) || 0) + ' m') : 'none') : '\u2014';
+  const battery = r.lastStatus ? (r.lastStatus.battery != null ? Math.round(r.lastStatus.battery) + '%' : '\u2014') : '\u2014';
+  const cam = r.lastRadarTime ? '\u2014' : '\u2014'; // updated by camera check below
+  return '<tr>' +
+    '<td>' + dot + (on ? 'online' : 'offline') + '</td>' +
+    '<td class="robot-name" onclick="openRobotConfig(\'' + r.name + '\')" title="Click to configure">' + r.name + '</td>' +
+    '<td>' + fmtCoord(r.lat) + '</td>' +
+    '<td>' + fmtCoord(r.lon) + '</td>' +
+    '<td>' + battery + '</td>' +
+    '<td>' + radar + '</td>' +
+    '<td>' + (r.camOk ? 'live' : '\u2014') + '</td>' +
+    '<td>' + fmtTime(r.lastStatusTime) + '</td>' +
+    '<td><div class="rob-actions">' +
+      '<button onclick="openRobotConfig(\'' + r.name + '\')">&#9881;</button>' +
+      '<button onclick="goToRobot(\'' + r.name + '\')">&#x1F4CC;</button>' +
+      '<button onclick="openCam(\'' + r.name + '\')">&#128248;</button>' +
+    '</div></td>' +
+  '</tr>';
+}
+
+function renderRobotsTables() {
+  const homeBody = document.getElementById('rbodyHome');
+  const pageBody = document.getElementById('rbodyPage');
+  const names = Object.keys(state.robots);
+  let html = '';
+  let onlineCount = 0;
+  names.forEach(function (n) {
+    const r = state.robots[n];
+    if (isRobotOnline(r)) onlineCount++;
+    html += robotRowHtml(r);
+  });
+  if (!html) {
+    const empty = '<tr><td colspan="9" style="color:#555;text-align:center;padding:16px;">' +
+      'No Android robots yet. Add one or wait for a robot to publish on <code>robots/&#60;name&#62;/status</code>.</td></tr>';
+    homeBody.innerHTML = empty;
+    pageBody.innerHTML = empty;
+  } else {
+    homeBody.innerHTML = html;
+    pageBody.innerHTML = html;
+  }
+  document.getElementById('robot-count').textContent = names.length + ' robots (' + onlineCount + ' online)';
+  document.getElementById('sidebar-robot-summary').textContent = onlineCount + ' / ' + names.length + ' online';
+}
+
+function openRobotConfig(name) {
+  const r = ensureRobot(name);
+  currentCfgRobot = name;
+  document.getElementById('cfgTitle').textContent = 'Robot Settings \u2014 ' + name;
+  document.getElementById('cfgName').value = r.name;
+  document.getElementById('cfgRange').value = r.range;
+  document.getElementById('cfgRings').value = r.rings;
+  document.getElementById('cfgColor').value = r.color;
+  document.getElementById('cfgUseGps').checked = r.useGps !== false;
+  document.getElementById('cfgLat').value = (r.lat != null) ? r.lat : (state.center.lat || '');
+  document.getElementById('cfgLon').value = (r.lon != null) ? r.lon : (state.center.lon || '');
+  document.getElementById('cfgHeading').value = r.headingManual || 0;
+  openModal('modalOverlay');
+}
+
+function sanitizeName(n) {
+  return (n || '').trim().replace(/[^a-zA-Z0-9_-]/g, '');
+}
+
+function saveRobotConfig() {
+  const name = sanitizeName(document.getElementById('cfgName').value);
+  if (!name) { log('Robot name required.'); return; }
+  // re-register under a new name if changed
+  if (name !== currentCfgRobot) {
+    const old = ensureRobot(currentCfgRobot);
+    if (state.robots[name]) { log('Robot ' + name + ' already exists.'); return; }
+    state.robots[name] = old;
+    old.name = name;
+    delete state.robots[currentCfgRobot];
+    delete state.robotCfg[currentCfgRobot];
+    currentCfgRobot = name;
+  }
+  const r = ensureRobot(name);
+  r.range = parseInt(document.getElementById('cfgRange').value, 10) || 200;
+  r.rings = parseInt(document.getElementById('cfgRings').value, 10) || 0;
+  r.color = document.getElementById('cfgColor').value;
+  r.useGps = document.getElementById('cfgUseGps').checked;
+  r.headingManual = parseFloat(document.getElementById('cfgHeading').value) || 0;
+  r.lat = r.useGps ? r.lat : (parseFloat(document.getElementById('cfgLat').value) || null);
+  r.lon = r.useGps ? r.lon : (parseFloat(document.getElementById('cfgLon').value) || null);
+  if (!r.useGps && r.lat != null && r.lon != null) {
+    r.lat = parseFloat(document.getElementById('cfgLat').value);
+    r.lon = parseFloat(document.getElementById('cfgLon').value);
+  }
+  state.robotCfg[name] = {
+    range: r.range, rings: r.rings, color: r.color, useGps: r.useGps,
+    heading: r.headingManual, lat: r.lat, lon: r.lon
+  };
+  saveRobotCfg();
+  drawRobotOnMap(name);
+  renderRobotsTables();
+  closeModal('modalOverlay');
+  log('Robot ' + name + ' configuration saved.');
+}
+
+function addRobotModal() {
+  currentCfgRobot = '';
+  document.getElementById('cfgTitle').textContent = 'Register New Robot';
+  document.getElementById('cfgName').value = 'robot-' + Math.floor(Math.random() * 900 + 100);
+  document.getElementById('cfgRange').value = 200;
+  document.getElementById('cfgRings').value = 4;
+  document.getElementById('cfgColor').value = '#00ff00';
+  document.getElementById('cfgUseGps').checked = true;
+  document.getElementById('cfgLat').value = state.center.lat;
+  document.getElementById('cfgLon').value = state.center.lon;
+  document.getElementById('cfgHeading').value = 0;
+  openModal('modalOverlay');
+}
+
+function removeRobot(name) {
+  if (!name) return;
+  if (!window.confirm('Remove robot "' + name + '" from the radar view?')) return;
+  clearRobotLayers(name);
+  delete state.robots[name];
+  delete state.robotCfg[name];
+  saveRobotCfg();
+  renderRobotsTables();
+  closeModal('modalOverlay');
+  log('Robot ' + name + ' removed.');
+}
+
+function centerMapOnRobot(name) {
+  goToRobot(name);
+}
+function goToRobot(name) {
+  const r = ensureRobot(name);
+  const c = robotLatLon(r);
+  if (!c) { log('Robot ' + name + ' has no position yet.'); return; }
+  switchPage('home');
+  map.setView([c[0], c[1]], 17);
+  log('Centered on robot ' + name);
+}
+
+// Camera viewer
+function openCam(name) {
+  document.getElementById('camTitle').textContent = 'Camera \u2014 ' + name;
+  document.getElementById('camImg').src = '/cam/' + encodeURIComponent(name) + '/mjpeg';
+  document.getElementById('camOverlay').style.display = 'flex';
+}
+function closeCam() {
+  document.getElementById('camImg').src = '';
+  document.getElementById('camOverlay').style.display = 'none';
+}
+
+// Periodic presence tick
+setInterval(function () {
+  let changed = false;
+  Object.keys(state.robots).forEach(function (n) {
+    const r = state.robots[n];
+    const on = isRobotOnline(r);
+    if (on !== r.online) { r.online = on; changed = true; }
+  });
+  if (changed) renderRobotsTables();
+}, 5000);
+
+/************ MQTT ************/
+function toggleMQTT() {
+  if (state.mqttConnected) disconnectMQTT();
+  else connectMQTT();
+}
+
+function connectMQTT() {
+  const host = document.getElementById('mqttHost').value;
+  const port = document.getElementById('mqttPort').value;
+  const topic = document.getElementById('mqttTopic').value;
+  const clientId = document.getElementById('mqttClientId').value || 'radar-' + Math.random().toString(16).slice(2,8);
+
+  document.getElementById('statusDot').className = 'status-dot status-connecting';
+  document.getElementById('statusText').textContent = 'Connecting...';
+  log('Connecting to ws://' + host + ':' + port);
+
+  try {
+    state.mqttClient = new Paho.Client(host, parseInt(port), clientId);
+
+    state.mqttClient.onConnectionLost = function(resp) {
+      state.mqttConnected = false;
+      document.getElementById('statusDot').className = 'status-dot status-disconnected';
+      document.getElementById('statusText').textContent = 'Disconnected';
+      document.getElementById('connectBtn').textContent = 'Connect';
+      log('Connection lost: ' + (resp.errorMessage || 'unknown'));
+    };
+
+    state.mqttClient.onMessageArrived = function(msg) {
+      const t = msg.destinationName;
+      if (t.indexOf('robots/') === 0) { handleRobotMsg(t, msg.payloadString); return; }
+      try {
+        const data = JSON.parse(msg.payloadString);
+        addDetection(data);
+      } catch(e) {
+        log('Invalid message: ' + e.message);
+      }
+    };
+
+    state.mqttClient.connect({
+      onSuccess: function() {
+        state.mqttConnected = true;
+        document.getElementById('statusDot').className = 'status-dot status-connected';
+        document.getElementById('statusText').textContent = 'Connected';
+        document.getElementById('connectBtn').textContent = 'Disconnect';
+        log('Connected! Subscribing: ' + topic);
+        state.mqttClient.subscribe(topic);
+        state.mqttClient.subscribe('robots/+/status');
+        state.mqttClient.subscribe('robots/+/radar');
+        document.getElementById('topicDisplay').textContent = topic;
+      },
+      onFailure: function(err) {
+        state.mqttConnected = false;
+        document.getElementById('statusDot').className = 'status-dot status-disconnected';
+        document.getElementById('statusText').textContent = 'Failed: ' + (err.errorMessage || 'error');
+        document.getElementById('connectBtn').textContent = 'Connect';
+        log('Connect failed: ' + (err.errorMessage || 'unknown'));
+      }
+    });
+  } catch(e) {
+    document.getElementById('statusDot').className = 'status-dot status-disconnected';
+    document.getElementById('statusText').textContent = 'Error: ' + e.message;
+    log('Error: ' + e.message);
+  }
+}
+
+function disconnectMQTT() {
+  if (state.mqttClient) {
+    state.mqttClient.disconnect();
+    state.mqttConnected = false;
+    document.getElementById('statusDot').className = 'status-dot status-disconnected';
+    document.getElementById('statusText').textContent = 'Disconnected';
+    document.getElementById('connectBtn').textContent = 'Connect';
+    log('Disconnected.');
+  }
+}
+
+function applyConfig(cfg) {
+  document.getElementById('mqttHost').value = cfg.host || 'localhost';
+  document.getElementById('mqttPort').value = cfg.wsPort || 8080;
+  document.getElementById('mqttTopic').value = cfg.topic || 'radar/detections';
+  document.getElementById('topicDisplay').textContent = cfg.topic || 'radar/detections';
+}
+
+function useLocalServer() {
+  fetch('/config.json').then(function (r) { return r.json(); }).then(function (cfg) {
+    applyConfig(cfg);
+    log('Configured for local broker (WS port ' + cfg.wsPort + ').');
+  }).catch(function () {
+    applyConfig({ host: 'localhost', wsPort: 8080, topic: 'radar/detections' });
+    log('Configured for local broker (localhost:8080).');
+  }).then(function () {
+    if (!state.mqttConnected) connectMQTT();
+  });
+}
+
+async function autoConnect() {
+  try {
+    const res = await fetch('/config.json');
+    const cfg = await res.json();
+    applyConfig(cfg);
+    log('Auto-detected local broker (WS port ' + cfg.wsPort + ').');
+    if (!state.mqttConnected) connectMQTT();
+  } catch (e) {
+    log('Standalone mode: enter MQTT settings manually if needed.');
+  }
+}
+
+/************ Simulation ************/
+function simulateData() {
+  if (state.simInterval) {
+    clearInterval(state.simInterval);
+    state.simInterval = null;
+    log('Simulation stopped.');
+    return;
+  }
+  log('Simulation started...');
+  const names = ['aircraft-01','drone-A','helicopter-3','ufo-X','bird-12','missile-7','balloon-2'];
+  let counter = 0;
+  state.simInterval = setInterval(() => {
+    counter++;
+    const angle = Math.random() * 360;
+    const dist = Math.random() * state.maxRange * 0.8;
+    const latOff = (dist / 111320) * Math.cos(angle * Math.PI / 180);
+    const lonOff = (dist / (111320 * Math.cos(state.center.lat * Math.PI / 180))) * Math.sin(angle * Math.PI / 180);
+    addDetection({
+      datetime: new Date().toISOString().replace('T',' ').slice(0,19),
+      lat: (state.center.lat + latOff).toFixed(6),
+      long: (state.center.lon + lonOff).toFixed(6),
+      altitude: Math.round(100 + Math.random() * 9000),
+      speed: Math.round(50 + Math.random() * 900),
+      direction: Math.round(angle),
+      object_name: names[Math.floor(Math.random() * names.length)]
+    });
+  }, 1500 + Math.random() * 1000);
+}
+
+// Range / ring listeners
+document.getElementById('rangeInput').addEventListener('change', function() {
+  state.maxRange = parseInt(this.value) || 5000;
+  document.getElementById('rangeInput').value = state.maxRange;
+  log('Range updated: ' + state.maxRange + 'm');
+});
+document.getElementById('rangeRings').addEventListener('change', function() {
+  state.rangeRings = parseInt(this.value);
+  log('Rings updated: ' + state.rangeRings);
+});
+document.getElementById('mqttTopic').addEventListener('change', function() {
+  document.getElementById('topicDisplay').textContent = this.value;
+});
+
+// Modal helpers
+function openModal(id){ document.getElementById(id).style.display = 'flex'; }
+function closeModal(id){ document.getElementById(id).style.display = 'none'; }
+
+// Init
+function init() {
+  loadRobotCfg();
+  resizeOverlay();
+  applyMap();
+  setColor('green');
+  requestAnimationFrame(animate);
+  renderTable();
+  renderRobotsTables();
+  log('Radar system initialized. Ready.');
+  log(state.robotCfg ? 'Robot registry loaded (' + Object.keys(state.robots).length + ' registered).' : '');
+}
+
+window.addEventListener('resize', function() {
+  resizeOverlay();
+  map.invalidateSize();
+});
+
+// Leaflet ready
+init();
+
+// Auto-connect when served by the local Node.js broker
+setTimeout(autoConnect, 500);
+</script>
+<script src="/paho-mqtt.js"></script>
+
+<div id="lessonOverlay">
+  <div class="modal modal-wide">
+    <div class="modal-head">
+      <b>&#128214; JS Lesson</b>
+      <button class="btn btn-danger" style="width:auto;padding:4px 16px;" onclick="closeLesson()">&#10005; Хаах</button>
+    </div>
+    <iframe id="lessonFrame" src="js-lesson/index.html" title="JS Lesson"></iframe>
+  </div>
+</div>
+</body>
+</html>

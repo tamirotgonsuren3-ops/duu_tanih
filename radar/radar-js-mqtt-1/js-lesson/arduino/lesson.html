@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="mn">
+<head>
+<meta charset="utf-8">
+<title>Хичээл 08 — Arduino + LD2415H</title>
+<link rel="stylesheet" href="../lessons.css">
+</head>
+<body>
+<div class="lesson-top">
+  <a href="../index.html">&#8592; Бүх хичээл</a>
+  <a href="javascript:void(0)" onclick="var p=window.parent;if(p!==window&&p.closeLesson){p.closeLesson();}else{window.close();} return false;">&#10005; Хаах</a>
+</div>
+
+<h1>Хичээл 08 — Arduino + LD2415H радар</h1>
+<p class="meta">UART холболт, пакетын формат, CRC16, програм</p>
+
+<p>Роботын радар нь <b>HLK-LD2415H</b> 24GHz mmWave радар модуль. Энэ нь UART (serial) интерфэйсээр мэдээлэл өгдөг. Arduino модуль болон телефон хоёрын хооронд гүүр болж ажиллана.</p>
+
+<h2>1. Угсралт (wiring)</h2>
+<table>
+<tr><th>Arduino</th><th>LD2415H</th></tr>
+<tr><td>Pin D2 (RX)</td><td>TX</td></tr>
+<tr><td>Pin D3 (TX)</td><td>RX</td></tr>
+<tr><td>5V</td><td>5V/VIN</td></tr>
+<tr><td>GND</td><td>GND</td></tr>
+</table>
+<p>Arduino <code>SoftwareSerial</code> (D2/D3) эсвэл API-ийн <code>Serial1</code> ашиглана. Телефон OTG кабелээр Arduino-ийн USB-д холбогдож, <code>Serial</code> (115200 8N1) -ийг харьцуулдаг.</p>
+<pre><code>#define RADAR_TX 3   // D3 pin -> LD2415H RX
+#define RADAR_RX 2   // D2 pin <- LD2415H TX
+#include &lt;SoftwareSerial.h&gt;
+SoftwareSerial Radar(RADAR_RX, RADAR_TX);</code></pre>
+
+<h2>2. LD2415H пакетын формат</h2>
+<p>LD2415H нь тогтмол пакетүүдийг UART-аар илгээдэг:</p>
+<pre><code>╔═══════════════════════════════════════════════════════╗
+║ Header:  0xF4 0xF3 0xF2 0xF1                           ║
+║ DataInt: 12 + 6×N   (N = target тоо)  [LE 16-bit]      ║
+║ Data:    ...                                            ║
+║ Checksum: CRC16 (Modbus шиг: poly 0x1021, init 0xFFFF) ║
+║ Tail:    0xF8 0xF7 0xF6 0xF5                            ║
+╚═══════════════════════════════════════════════════════╝</code></pre>
+<p>Data дотор: <code>state</code> (0=юу ч байхгүй, 1=хөдөлгөөнт, 2=тогтмол), <code>distance</code>, <code>energy</code>, дараа нь гол буудлын бүх target-ийн <code>gate</code>/<code>type</code>/<code>distance</code>/<code>energy</code>.</p>
+
+<h2>3. Пакет задлах</h2>
+<p>Arduino буфер руу byte-уудыг цуглуулаад, header-ээс олж, CRC шалгаж, бүрэн рамнаас өгөгдлийг авдаг:</p>
+<pre><code>const uint8_t HEADER[4] = {0xF4,0xF3,0xF2,0xF1};
+const uint8_t TAIL[4]   = {0xF8,0xF7,0xF6,0xF5};
+
+void parseRadar() {
+  for (int i = 0; i &lt;= idx - 14; i++) {
+    if (memcmp(buf + i, HEADER, 4) != 0) continue;
+    uint16_t len = buf[i+4] | (buf[i+5] &lt;&lt; 8);      // Little-Endian
+    if (i + 4 + len + 4 &gt; idx) return;               // харах биш
+    uint16_t crcCalc = crc16(buf + i + 6, len - 2);
+    uint16_t crcGot  = (buf[i+6+len-2]) | (buf[i+6+len-1] &lt;&lt; 8);
+    if (crcCalc != crcGot) return;                    // муу пакет
+    // ... state, dist, ena, targets уншина ...
+  }
+}
+
+uint16_t crc16(const uint8_t* d, int n) {
+  uint16_t crc = 0xFFFF;
+  for (int i = 0; i &lt; n; i++) {
+    crc ^= d[i];
+    for (int b = 0; b &lt; 8; b++)
+      crc = (crc &amp; 1) ? (crc &gt;&gt; 1) ^ 0x1021 : (crc &gt;&gt; 1);
+  }
+  return crc;
+}</code></pre>
+
+<h2>4. JSON мөр гаргах (телефон руу)</h2>
+<p>Arduino нь илрүүлэлтийг энгийн JSON мөр болгон <code>Serial</code> руу бичнэ:</p>
+<pre><code>Serial.print(F("RADAR {"));
+Serial.print(F("\"state\":"));   Serial.print(state);
+Serial.print(F(",\"dist\":"));   Serial.print(dist);
+Serial.print(F(",\"ena\":"));    Serial.print(ena);
+Serial.print(F(",\"targets\":["));
+for (int i = 0; i &lt; targetCount; i++) {
+  if (i) Serial.print(',');
+  Serial.print(F("{\"g\":"));    Serial.print(gs[i]);
+  Serial.print(F(",\"t\":"));    Serial.print(ts[i]);
+  Serial.print(F(",\"d\":"));    Serial.print(ds[i]);
+  Serial.print(F(",\"e\":"));    Serial.print(es[i]);
+  Serial.print('}');
+}
+Serial.println(F("]}"));</code></pre>
+<p>Телепонны USB-serial сонсогч энэ мөрийг барьж, <code>RADAR</code> угтвараар таньдаг. Мөр выпуклаад, төсөөллийн утгуудыг түр зуур үүсгэдэг.</p>
+
+<div class="note">Хуурай туршилтад (hardware-гүй) <code>WEB</code> Serial monitor-ээс ч гэсэн гаргах боломжтой. LD2415H-ийн бодит мэдээлэл авахын тулд hardware холбох хэрэгтэй.</div>
+
+<h3>Дасгал</h3>
+<ul>
+  <li>Симуляцитай үед <code>RADAR</code> мөрний <code>dist</code>-г өөрчилөөд вэб аппны роботын хүснэгтэд яаж тусгагддагийг хар.</li>
+  <li>CRC алдаатай пакет ирэхэд юу болохыг судлахын тулд санаатайгаар byte буруу илгээ.</li>
+</ul>
+</body>
+</html>

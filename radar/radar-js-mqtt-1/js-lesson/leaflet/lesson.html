@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="mn">
+<head>
+<meta charset="utf-8">
+<title>Хичээл 04 — Leaflet</title>
+<link rel="stylesheet" href="../lessons.css">
+</head>
+<body>
+<div class="lesson-top">
+  <a href="../index.html">&#8592; Бүх хичээл</a>
+  <a href="javascript:void(0)" onclick="var p=window.parent;if(p!==window&&p.closeLesson){p.closeLesson();}else{window.close();} return false;">&#10005; Хаах</a>
+</div>
+
+<h1>Хичээл 04 — Leaflet</h1>
+<p class="meta">Газрын зураг, tile provider, давхарга</p>
+
+<p><b>Leaflet</b> нь хөнгөн, plugin-фriendly JS газрын зургийн сан. Энэ апп-д орон нутгийн хуулбарыг <code>leaflet/</code> фолдерт ашиглаж байна (интернетгүй бүтээхэд бэлэн).</p>
+
+<h2>1. Зургийг үүсгэх</h2>
+<pre><code>const map = L.map('map', { zoomControl: false, attributionControl: false })
+  .setView([state.center.lat, state.center.lon], 14);</code></pre>
+<p><code>L.map('map')</code> нь <code>&lt;div id="map"&gt;</code>-г зураг болгоно. <code>setView</code> нь төв ба масштабыг тогтооно.</p>
+
+<h2>2. Tile provider &mdash; газрын зурагны хавтан</h2>
+<p>Хавтангууд (tiles) нь гадаад тусгаарлагдсан url-аас ачаалагддаг. Апп хэд хэдэн provider-ийг тогтмол хадгалдаг:</p>
+<pre><code>const PROVIDER_TEMPLATES = {
+  osm:      { url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', max: 19, attr: osmAttrib },
+  carto:    { url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', max: 20 },
+  opentop:  { url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', max: 17 },
+  esri:     { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', max: 18 },
+};</code></pre>
+<p>Providether-ий шилжүүлэх:</p>
+<pre><code>function applyMapProvider(name) {
+  if (state.tileLayer) map.removeLayer(state.tileLayer);
+  const t = PROVIDER_TEMPLATES[name];
+  state.tileLayer = L.tileLayer(t.url, { attribution: t.attr, maxZoom: t.max, subdomains: t.subdomains })
+    .addTo(map);
+}</code></pre>
+<p>Google-ий хувьд <code>leaflet/GoogleMutant.js</code> plugin ашиглана &mdash; Google-ийн API key шаардлагатай; үгүй бол <code>osm</code> руу буцаж авдаг.</p>
+
+<h2>3. Тэмдэглэгээ, тойрог, шугам</h2>
+<p>Апп илрүүлэлтийг <code>L.circleMarker</code> (жижиг цэг), роботыг <code>L.circle</code> (хүрээ) + шугамаар зурдаг:</p>
+<pre><code>const blip = L.circleMarker([lat, lon], {
+  radius: 5, color: base, fillColor: base, fillOpacity: 0.9
+}).bindPopup(`&lt;b&gt;${name}&lt;/b&gt;`).addTo(map);
+
+const rangeCircle = L.circle([r.lat, r.lon], {
+  radius: r.rangeM, color: base, weight: 1, fill: false
+});</code></pre>
+
+<h2>4. Төвийн синк</h2>
+<p>Хэрэглэгч зургийг сульдаавал төвийг мэдээж <code>state.center</code>-т шинэчлэх хэрэгтэй:</p>
+<pre><code>map.on('moveend', function() {
+  const c = map.getCenter();
+  state.center = { lat: c.lat, lon: c.lng };
+  // инпут талбаруудыг дахин дүүргэх
+  document.getElementById('centerLat').value = c.lat.toFixed(6);
+  document.getElementById('centerLon').value = c.lng.toFixed(6);
+});</code></pre>
+
+<h2>5. Роботын давхаргын удирдлага</h2>
+<p>Робот бүр өөрийн <code>L.layerGroup</code> үүсгэнэ; шинэчлэлт бүрт давхаргыг устгаж, дахин үүсгэхээс зайлсхийхийн тулд зургийн "signature"-ыг хадгалан, өөрчлөгдсөн үед л дахин зурдаг:</p>
+<pre><code>const sig = JSON.stringify({lat:r.lat, lon:r.lon, range:r.rangeM, rings:r.rings, color:r.color, heading:r.heading, blips:r.blips});
+if (r.sig !== sig) { clearRobotLayers(name); drawRobotOnMap(r); r.sig = sig; }</code></pre>
+
+<h2>6. Зурагны давхраа (layering)</h2>
+<p>Радар overlay нь Leaflet давхаргын дээгүүр зурагддаг:</p>
+<pre><code>#radarOverlay{position:absolute;inset:0;pointer-events:none;z-index:800;}</code></pre>
+<p><code>z-index:800</code> нь Leaflet tile/тэмдэгний дээр, харин төвийн пиний дээр харагдана. <code>pointer-events:none</code> нь хэрэглэгч хулганаар зурагтай харилцах боломжийг хадгална.</p>
+
+<div class="note">Интернетгүй бол зарим provider tile ачаалахгүй &mdash; зураг саарал байх боловч радар, blip-ууд үргэлжлүүлэн харагдах болно.</div>
+
+<h3>Дасгал</h3>
+<ul>
+  <li><code>PROVIDER_TEMPLATES</code>-д шинэ provider нэм (жишээ: <code>https://tiles.stadiamaps.com/.../</code>).</li>
+  <li>Робот хүрээний өнгийг <code>r.color</code>-оос хамааруулан өөрчилж үз.</li>
+</ul>
+</body>
+</html>

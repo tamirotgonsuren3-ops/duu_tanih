@@ -1,0 +1,14 @@
+<resources>
+    <!-- Dark theme that fits the radar look -->
+    <style name="Theme.RobotApp" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">#00ff00</item>
+        <item name="colorPrimaryVariant">#00cc00</item>
+        <item name="colorOnPrimary">#000000</item>
+        <item name="colorSecondary">#00ff00</item>
+        <item name="colorOnSecondary">#000000</item>
+        <item name="android:windowBackground">#0a0a0a</item>
+        <item name="android:statusBarColor">#0a0a0a</item>
+        <item name="android:navigationBarColor">#0a0a0a</item>
+        <item name="android:textColor">#dddddd</item>
+    </style>
+</resources>

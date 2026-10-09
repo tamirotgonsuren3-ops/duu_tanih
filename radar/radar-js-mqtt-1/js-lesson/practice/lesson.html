@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="mn">
+<head>
+<meta charset="utf-8">
+<title>Хичээл 10 — Дадлага</title>
+<link rel="stylesheet" href="../lessons.css">
+</head>
+<body>
+<div class="lesson-top">
+  <a href="../index.html">&#8592; Бүх хичээл</a>
+  <a href="javascript:void(0)" onclick="var p=window.parent;if(p!==window&&p.closeLesson){p.closeLesson();}else{window.close();} return false;">&#10005; Хаах</a>
+</div>
+
+<h1>Хичээл 10 — Дадлага</h1>
+<p class="meta">Жижиг даалгаварууд, баталгаажуулалтын арга</p>
+
+<p>Энд тайлбарласан бүх зүйлийг туршиж суурь болгоорой. Өөрчлөлт бүрийн дараа <code>F5</code> дарж, <b>DevTools (F12)</b> console-ээс алдаа байгаа эсэхийг харна уу.</p>
+
+<h2>Даалгавар 1 — Өөрийн MQTT топик</h2>
+<p>Сервисийн вэб апп-д шинэ топик нэм:</p>
+<ol>
+  <li><code>mqtt-server.js</code> дээр <code>HTTP</code> сервист бүх топикийг логдуулдаг хэсэгт <code>aedes.on('publish')</code> байгаа.</li>
+  <li><code>radar.html</code> дээр <code>subscribe('alerts')</code> нэмж, <code>onMessageArrived</code>-д <code>alert</code> случая хийнэ.</li>
+  <li>mosquitto_pub-аар илгээж туршиж үз.</li>
+</ol>
+
+<h2>Даалгавар 2 — Үсгийн өсгөх (чиглэлийг)</h2>
+<p>Гол радарын <code>maxRangeM</code> утгыг <code>5000</code> хүртэл өсгөж, blip подлноет цөөн хүрээний цэгүүдэд тарааж байгаа эсэхийг хар. <code>distToPx()</code> урт блок-той харьцуулахыг ажигла.</p>
+
+<h2>Даалгавар 3 — Tile provider нэмэх</h2>
+<p><code>PROVIDER_TEMPLATES</code> руу шинэ provider нэмж (жишээ: <code>stamen-toner</code>), <code>applyMapProvider('name')</code> гэж дуудаж, sidebar инпут сонголтод шинэ сонголт нэм.</p>
+<p>Тогда газрын зургийн <b>НҮБ-ийн</b> хавтан ачаалж байгаа эсэхийг DevTools &rarr; Network табнаас харна уу.</p>
+
+<h2>Даалгавар 4 — Роботын радар өнгө</h2>
+<p>Тохиргооны модаль дээрх өнгөний picker-ийг ашиглаад <code>r.color</code>-ыг өөрчил. Мап + хүснэгтийн цэгүүд шууд дахин зурдаг эсэхийг хар. Код: <code>drawRobotOnMap(r)</code>.</p>
+
+<h2>Даалгавар 5 — CDP (headless) тест</h2>
+<p>Хуудас алдаагүй ажиллаж байгаа эсэхийг терминалаас шалгана:</p>
+<pre><code>msedge --headless=new --remote-debugging-port=9222 --user-data-dir=/tmp/edge-prof http://localhost:8080/radar.html
+
+# node script:
+const WebSocket = require('ws');
+const list = await fetch('http://localhost:9222/json/list').then(r=&gt;r.json());
+const ws = new WebSocket(list.find(t=&gt;t.type==='page').webSocketDebuggerUrl);
+// Runtime.evaluate: document.getElementById('statusText').textContent
+</code></pre>
+<p>Энэ нь вэб аппны хамгийн хурдан automашia тест юм: пробел Console руу <code>console.log</code> алдааг цуглуул.</p>
+
+<h2>Даалгавар 6 — Bluetooth-гүйгээр радарын симулятор</h2>
+<p>Гараар <code>radar/detections</code> топик руу JSON илгээж, радар дээр blip чиглэлээ өөрчлөх:</p>
+<pre><code>mosquitto_pub -h localhost -t "radar/detections" -m '{"datetime":"2026-09-10 14:30:00","lat":47.9185,"long":106.9177,"altitude":500,"speed":120,"direction":45,"object_name":"target-01"}'
+</code></pre>
+
+<h2>Дүгнэлт</h2>
+<p>Энэ төсөл ийм бүтэн систем юм:</p>
+<table>
+<tr><th>Түвшин</th><th>Технологи</th><th>Хаана</th></tr>
+<tr><td>UI</td><td>HTML + CSS + JavaScript</td><td><code>radar.html</code></td></tr>
+<tr><td>Газрын зураг</td><td>Leaflet + tile providers</td><td><code>radar.html</code>, <code>leaflet/</code></td></tr>
+<tr><td>Радар</td><td>HTML5 Canvas</td><td><code>radar.html</code></td></tr>
+<tr><td>Брокер/сервер</td><td>Node.js + aedes + ws</td><td><code>mqtt-server.js</code></td></tr>
+<tr><td>Робот мэдээ</td><td>MQTT + JSON</td><td><code>radar.html</code>, <code>mqtt-server.js</code></td></tr>
+<tr><td>Радар hardware</td><td>Arduino + LD2415H</td><td><code>arduino/robot_radar/</code></td></tr>
+<tr><td>Телефон</td><td>Android + Kotlin + Paho</td><td><code>android-robot-app/</code></td></tr>
+</table>
+
+<div class="note">Сонирхож, соёлтой сурцгаая! Эх кодыг өөрчлөхдөө хуулбарлаж хадгал. Ямар ч алдаа гарвал console-ийн мессежийг уншиж, энэ хэсгийн дараалалыг дага.</div>
+</body>
+</html>

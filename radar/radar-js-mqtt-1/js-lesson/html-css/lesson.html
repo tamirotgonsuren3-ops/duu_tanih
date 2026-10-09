@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="mn">
+<head>
+<meta charset="utf-8">
+<title>Хичээл 01 — HTML &amp; CSS</title>
+<link rel="stylesheet" href="../lessons.css">
+</head>
+<body>
+<div class="lesson-top">
+  <a href="../index.html">&#8592; Бүх хичээл</a>
+  <a href="javascript:void(0)" onclick="var p=window.parent;if(p!==window&&p.closeLesson){p.closeLesson();}else{window.close();} return false;">&#10005; Хаах</a>
+</div>
+
+<h1>Хичээл 01 — HTML &amp; CSS</h1>
+<p class="meta">Хуудасны бүтэц, байрлал, хэв маяг</p>
+
+<p>Апп нь нэг ерөнхий <code>radar.html</code> файл &mdash; HTML, CSS, JavaScript бүгд дотор нь. Энэ нь самбар (<b>sidebar</b>) + үндсэн хэсэг (<b>main</b>) гэсэн хоёр хэсэгтэй, зүүн самбар нь удирдлага, баруун тал нь газрын зураг/радар.</p>
+
+<h2>Үндсэн HTML бүтэц</h2>
+<p>Бүх зүйл <code>&lt;html&gt;,&lt;body&gt;</code> 100% өндөртэй, дотоод нь <code>#app</code> flex-based хэвтээ хуваагдана:</p>
+<pre><code>&lt;body&gt;
+  &lt;div id="app"&gt;                              &lt;!-- бүх дэлгэц --&gt;
+    &lt;div id="sidebar"&gt;                       &lt;!-- зүүн 340px хяналтын самбар --&gt;
+      &lt;div class="sidebar-header"&gt;...&lt;/div&gt;  &lt;!-- Гарчиг/лого --&gt;
+      &lt;div class="nav-tabs"&gt;                  &lt;!-- Home | Robots --&gt;
+        &lt;div class="nav-tab active" onclick="switchPage('home')"&gt;Home&lt;/div&gt;
+        &lt;div class="nav-tab" onclick="switchPage('robots')"&gt;Robots&lt;/div&gt;
+      &lt;/div&gt;
+      &lt;div class="section"&gt;...&lt;/div&gt;         &lt;!-- MQTT тохиргоо --&gt;
+      &lt;div class="section"&gt;...&lt;/div&gt;         &lt;!-- Төв/параметер --&gt;
+      &lt;div class="section"&gt;...&lt;/div&gt;         &lt;!-- Зураглал/өнгө --&gt;
+      &lt;div id="sidebar-footer"&gt;               &lt;!-- ёроолд: JS Lesson линк --&gt;
+        &lt;button onclick="openLesson()"&gt;JS Lesson&lt;/button&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+    &lt;div id="main"&gt;                           &lt;!-- баруун хэсэг --&gt;
+      &lt;div id="homeView"&gt;                     &lt;!-- зураг + радар, дараа нь хүснэгт --&gt;
+        &lt;div id="radar-container"&gt;            &lt;!-- бүтэн 100vh өндөр --&gt;
+          &lt;div id="map"&gt;&lt;/div&gt;
+          &lt;canvas id="radarOverlay"&gt;&lt;/canvas&gt;
+        &lt;/div&gt;
+        &lt;div id="bottom-stack"&gt;              &lt;!-- historical + robots таблицууд --&gt;
+          ...
+        &lt;/div&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+  &lt;/div&gt;
+&lt;/body&gt;</code></pre>
+
+<p>Хуудасны scroll-ийн логик:</p>
+<ul>
+  <li><code>html,body{height:100%;overflow:hidden;}</code> &mdash; хуудас өөрөө scroll-дохгүй;</li>
+  <li><code>#sidebar</code> нь <code>overflow-y:auto</code> &mdash; зөвхөн самбар scroll-доно;</li>
+  <li><code>#homeView{overflow-y:auto}</code> ба <code>#radar-container{height:100vh}</code> &mdash; радар дэлгэцийг бүтэн эзэлнэ, доорх хүснэгтүүд рүү scroll хийгээд харна.</li>
+</ul>
+
+<h2>CSS-ийн гол зарчим</h2>
+<p>Тем нь хар (<code>#0a0a0a</code>) дэвсгэр + ногоон (<code>#0f0</code>) акцент. Энэ хоёр өнгийг ашиглахад радарын мэдрэмж гарна.</p>
+<table>
+<tr><th>Сонгогч</th><th>Үүрэг</th></tr>
+<tr><td><code>#app</code></td><td>Бүх дэлгэц: <code>display:flex</code>, хэвтээ домог</td></tr>
+<tr><td><code>#sidebar</code></td><td>340px тогтмол өргөн, зүүн талд</td></tr>
+<tr><td><code>#main</code></td><td><code>flex:1</code> — үлдсэн бүх өргөнийг авна</td></tr>
+<tr><td><code>#radar-container</code></td><td><code>height:100vh</code> — радар бүтэн дэлгэц</td></tr>
+<tr><td><code>.field</code></td><td>Инпут бүрийн гадна талбай (label + input)</td></tr>
+<tr><td><code>.btn-primary</code></td><td>Ногоон гол товч (Connect/Simulate)</td></tr>
+<tr><td><code>#modalOverlay</code></td><td>Тогтмол <code>position:fixed</code> бүрхүүл, төвд modal</td></tr>
+</table>
+
+<h2>Модаль цонх</h2>
+<p>Тохиргооны цонхнууд нэг нийтлэг загвартай: бүрхүүл <code>#modalOverlay</code>, дотор нь <code>.modal</code>. Харагдах/нуугдахыг JavaScript <code>display:flex</code> ↔ <code>none</code> шилжүүлдэг:</p>
+<pre><code>#modalOverlay{position:fixed;inset:0;background:rgba(0,0,0,0.75);
+  display:none;align-items:center;justify-content:center;z-index:2000;}
+.modal{background:#111;border:1px solid #333;border-radius:8px;
+  width:min(560px,94vw);max-height:90vh;overflow:auto;padding:20px;}</code></pre>
+
+<h2>Хичээлийн модаль</h2>
+<p>Зүүн самбарын ёроолын <b>JS Lesson</b> товч нь апп дотор <code>&lt;iframe&gt;</code> ачаалж, хичээлийг алдалгүй харна:</p>
+<pre><code>&lt;div id="lessonOverlay"&gt;
+  &lt;div class="modal modal-wide"&gt;
+    &lt;iframe id="lessonFrame" src="js-lesson/index.html"&gt;&lt;/iframe&gt;
+  &lt;/div&gt;
+&lt;/div&gt;</code></pre>
+<p>ижил origin-тэй тул хичээлийн доторх "Хаах" товч <code>parent.closeLesson()</code> гэж дээд цонхны функцийг дуудаж чадна.</p>
+
+<h3>Өөрчлөл хийж үзэх</h3>
+<ul>
+  <li><code>radar.html</code> доторх өнгөний утгуудыг өөрчил: <code>#0f0</code> &rarr; <code>#0ff</code> гэх мэт.</li>
+  <li><code>--</code>-аар шинэ товч нэмээд <code>onclick</code> өг (жишээ: "Export").</li>
+  <li>Самбарын өргөнийг <code>#sidebar{width:340px}</code> &rarr; <code>380px</code> болго.</li>
+</ul>
+</body>
+</html>

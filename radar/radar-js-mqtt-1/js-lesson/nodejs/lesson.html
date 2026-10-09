@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="mn">
+<head>
+<meta charset="utf-8">
+<title>Хичээл 06 — Node.js сервер</title>
+<link rel="stylesheet" href="../lessons.css">
+</head>
+<body>
+<div class="lesson-top">
+  <a href="../index.html">&#8592; Бүх хичээл</a>
+  <a href="javascript:void(0)" onclick="var p=window.parent;if(p!==window&&p.closeLesson){p.closeLesson();}else{window.close();} return false;">&#10005; Хаах</a>
+</div>
+
+<h1>Хичээл 06 — Node.js сервер</h1>
+<p class="meta">aedes брокер + HTTP статик + камер endpoint</p>
+
+<p><code>mqtt-server.js</code> нь гурван зүйл нэг процесст хийдэг:</p>
+<ol>
+  <li>MQTT брокер (aedes) &mdash; TCP (1883) + WebSocket (8080)</li>
+  <li>HTTP сервер &mdash; <code>radar.html</code> болон бусад статик файлууд</li>
+  <li>Камерын frame хадгалагч болон MJPEG stream</li>
+</ol>
+
+<h2>1. HTTP статик файл</h2>
+<pre><code>function sendFile(res, filePath, contentType) {
+  fs.readFile(filePath, function (err, data) {
+    if (err) return res.writeHead(404) &amp;&amp; res.end('not found');
+    res.writeHead(200, { 'Content-Type': contentType });
+    res.end(data);
+  });
+}
+
+const httpServer = http.createServer(function (req, res) {
+  if (req.url === '/' || req.url === '/radar.html') {
+    sendFile(res, htmlPath, 'text/html; charset=utf-8');
+  } else if (req.url === '/config.json') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(cfg));          // жинхэнэ портууд
+  } else if (req.url.indexOf('/js-lesson/') === 0) {
+    // хичээлийн файлууд
+    ...
+  } else {
+    res.writeHead(404); res.end('Not found');
+  }
+});</code></pre>
+<p>Сервер удирддаг нь зөвхөн аюулгүй, хянасан path-ууд. <code>/js-lesson/</code>-ий хувьд <code>path.join</code> + <code>startsWith</code> шалгалтаар directory traversal оруулж болохгүй.</p>
+
+<h2>2. Портууд: fallback</h2>
+<p>Порт авч чадахгүй бол (жишээ: өөр апп аль хэдийн 8080 ашиглаж байвал) чөлөөт порт руу цацдаг:</p>
+<pre><code>function tryListen(server, preferred, label) {
+  return new Promise(function (resolve, reject) {
+    let usedFree = false;
+    function onListening() { resolve(server.address().port); }
+    function onError(err) {
+      if (err.code === 'EADDRINUSE' &amp;&amp; !usedFree) {
+        usedFree = true;
+        server.once('error', onError);
+        server.listen(0);                 // порт 0 = систем чөлөөт порт өгнө
+      } else reject(err);
+    }
+    server.once('listening', onListening);
+    server.once('error', onError);
+    server.listen(preferred);
+  });
+}</code></pre>
+<p>Брокер ба HTTP сервер тус бүрдээ унасан чөлөөт портыг <code>/config.json</code> дээр хэвлэдэг. Вэб апп энэ файлыг уншиж, өөрийгөө жинхэнэ порт руу холбоно:</p>
+<pre><code>fetch('/config.json').then(r =&gt; r.json()).then(cfg =&gt; {
+  connectMqtt(cfg.host, cfg.mqttTcpPort);
+});</code></pre>
+
+<h2>3. MQTT брокер (aedes)</h2>
+<pre><code>const aedes = require('aedes')();
+const wsServer = new ws.Server({ server: httpServer });   // WebSocket
+wsServer.on('connection', socket =&gt;
+  aedes.handle(ws.createWebSocketStream(socket)));
+
+const tcpServer = net.createServer(aedes.handle);          // TCP</code></pre>
+<p>Нэг aedes instance хоёр тээврийн замаар хүлээн авдаг. WebSocket нь хэрэгслүүд (browser) дээр веб апптай ижил портыг хуваалцана.</p>
+
+<h2>4. Роботын register (брокерын publish событ)</h2>
+<pre><code>aedes.on('publish', function (packet, client) {
+  const m = /^robots\/([^/]+)\/(status|radar)$/.exec(packet.topic);
+  if (m) {
+    const name = m[1];
+    let parsed = null;
+    try { parsed = JSON.parse(packet.payload.toString()); } catch (e) {}
+    if (parsed) {
+      const r = robots[name] || (robots[name] = { name, lastSeen: 0, lastStatus: null, lastRadar: null });
+      r.lastSeen = Date.now();
+      if (m[2] === 'status') r.lastStatus = parsed; else r.lastRadar = parsed;
+    }
+  }
+});</code></pre>
+<p>Энэ нь <code>/api/robots</code> эндпоинтэд тохируулагддаг:</p>
+<pre><code>// GET /api/robots  => {"robots":[{"name":"robot-1","online":true,"lastStatus":{...}}]}
+const now = Date.now();
+const list = Object.keys(robots).map(k =&gt; ({
+  name: k,
+  online: (now - robots[k].lastSeen) &lt; 10000,   // 10 секундээс дээшгүй бол online
+  lastStatus: robots[k].lastStatus,
+}));</code></pre>
+
+<h2>5. Камер (MJPEG stream)</h2>
+<p>Android робот JPEG frame-уудыг <code>POST /cam/&lt;name&gt;</code>-д, BLOB биеэр илгээнэ. Сервер тус бүрийг хадгалаад, холбогдсон stream viewer-т шууд хэвлэдэг:</p>
+<pre><code>const cams = {};   // name -> { buf, ts, streams:Set<response> }
+
+res.writeHead(200, {
+  'Content-Type': 'multipart/x-mixed-replace; boundary=radarframe',
+  'Cache-Control': 'no-store'
+});
+if (c.buf) writeFrame(res, c.buf);       // сүүлийн фрейм шууд
+c.streams.add(res);                       // шинэ фрейм ирэхэд дахин илгээнэ
+res.on('close', () =&gt; c.streams.delete(res));</code></pre>
+<p>Browser-ийн <code>&lt;img&gt;</code> нь <code>multipart/x-mixed-replace</code> фрameсл дараалан илүү тасралтгүй хүлээн авдаг тул MJPEG video шиг ажиллана.</p>
+
+<h2>6. Хичээлийн файлуудыг сервэрлэх</h2>
+<p>Энэ хичээлийн хуудаснууд өөрөө энэ сервэрээс ирдэг! <code>/js-lesson/...</code> гэсэн request нь <code>js-lesson/</code> фолдероос файл уншиж, mime төрлийг нь тохируулан илгээдэг. Тиймээс бүх зүйл нэг серверээр: вэб апп + хичээл + MQTT + камер.</p>
+
+<h3>Дасгал</h3>
+<ul>
+  <li>Серверээ <code>HTTP_PORT=9000 node mqtt-server.js</code> гэж эхлүүлээд, вэб апп автоматаар тухайн порт руу холбогдож байгаа эсэхийг харж турш. (апп <code>/config.json</code>-оос уншина)</li>
+  <li><code>sendFile</code>-д шинэ mime (<code>.pdf</code>) нэмж турш.</li>
+</ul>
+</body>
+</html>

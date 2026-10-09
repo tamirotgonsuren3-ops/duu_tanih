@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="mn">
+<head>
+<meta charset="utf-8">
+<title>Хичээл 02 — JavaScript</title>
+<link rel="stylesheet" href="../lessons.css">
+</head>
+<body>
+<div class="lesson-top">
+  <a href="../index.html">&#8592; Бүх хичээл</a>
+  <a href="javascript:void(0)" onclick="var p=window.parent;if(p!==window&&p.closeLesson){p.closeLesson();}else{window.close();} return false;">&#10005; Хаах</a>
+</div>
+
+<h1>Хичээл 02 — JavaScript</h1>
+<p class="meta">Аппын цөм: төлөв, DOM, мэдээ, цаг</p>
+
+<p>Бүх логик <code>radar.html</code> доторх <code>&lt;script&gt;</code> блоконд байна. Хамгийн чухал шийдэл нь <b>төлөвийг нэг объектод хадгалах</b> юм.</p>
+
+<h2>1. Төлөв (<code>state</code>) объект</h2>
+<pre><code>const state = {
+  mapTheme: 'dark',
+  mapProvider: 'carto',
+  customColor: '#00ff00',
+  center: { lat: 47.91856696684756, lon: 106.91779462330955 },
+  sweepAngle: 0,
+  currentPage: 1,
+  perPage: 20,
+  mqttConnected: false,
+  mqttClient: null,
+  detections: [],
+  robots: {},
+  robotCfg: {},
+  colors: { green: '#0f0', red: '#f33', blue: '#39f', custom: '#00ff00' },
+};</code></pre>
+<p>Сайн тал: нэг л газар бүх өгөгдөл; өөр өөр функцууд <code>state.xxx</code> уншиж/бичиж, нийтлэг төлөвийг хуваалцана.</p>
+
+<h2>2. DOM ажиллагаа</h2>
+<p>Өөрчлөлтийг гар аргаар UI-д хуулдаг (<code>renderTable()</code> гэх мэт):</p>
+<pre><code>function renderTable() {
+  const tbody = document.getElementById('tableBody');
+  const total = state.detections.length;
+  const totalPages = Math.max(1, Math.ceil(total / state.perPage));
+  ...
+  tbody.innerHTML = '';
+  page.forEach((d, i) => {
+    const tr = document.createElement('tr');
+    if (i === 0) tr.className = 'new-detection';
+    tr.innerHTML = `&lt;td&gt;${start + i + 1}&lt;/td&gt;&lt;td&gt;${d.datetime}&lt;/td&gt;...`;
+    tbody.appendChild(tr);
+  });
+  renderPagination(totalPages);
+}</code></pre>
+<p>Темплейт string-д (<code>`...${...}`</code>) хувьсагч шууд орлуулдаг. Гэхдээ хэрэглэгчийн оруулсан текстийг орлуулахдаа болгоомжтой &mdash; XSS-ээс хамгаалахын тулд зөвшөөрөгдсөн тэмдэгтийг шүүж байгаа (робот нэр &rarr; <code>sanitizeName()</code>).</p>
+
+<h2>3. Мэдээ хүлээн авах (MQTT callback)</h2>
+<pre><code>state.mqttClient.onMessageArrived = function(msg) {
+  const t = msg.destinationName;
+  if (t.indexOf('robots/') === 0) { handleRobotMsg(t, msg.payloadString); return; }
+  try {
+    const data = JSON.parse(msg.payloadString);   // текст → объект
+    addDetection(data);
+  } catch (e) { log('Invalid message: ' + e.message); }
+};</code></pre>
+<p>Хэрэв топик <code>robots/</code> гэж эхэлбэл роботын зам руу, эс бөгөөс radar detection гэж үзнэ.</p>
+
+<h2>4. Радар эргэлтийн loop</h2>
+<p>Canvas радар нь <code>requestAnimationFrame</code> ашиглан секундэд ~60 удаа зурагддаг:</p>
+<pre><code>function step(t) {
+  if (state.mapTheme === 'dark' || state.mapTheme === 'black') {
+    state.sweepAngle = (state.sweepAngle + 0.8) % 360;
+    drawRadarOverlay();   // цацраг үүсгэх
+  }
+  requestAnimationFrame(step);
+}
+requestAnimationFrame(step);</code></pre>
+
+<h2>5. Тохиргоог хадгалах (localStorage)</h2>
+<pre><code>function saveCfg() {
+  localStorage.setItem('radar_cfg', JSON.stringify(state));
+}
+function loadCfg() {
+  try {
+    const c = JSON.parse(localStorage.getItem('radar_cfg'));
+    if (c) Object.assign(state, c);
+  } catch (e) { /* эхний удаа */ }
+}</code></pre>
+<p>Хуудас revise-болгоход тохиргоо алга болдоггүй. Роботуудын хувьд <code>radar_robot_cfg</code> тусдаа ключ хэрэглэдэг.</p>
+
+<h2>6. Үйл явдал ба товч</h2>
+<ul>
+  <li><code>onclick</code> HTML атрибут: <code>&lt;button onclick="connectMqtt()"&gt;</code></li>
+  <li>Form submit-д <code>return false</code>, эсвэл <code>event.preventDefault()</code></li>
+  <li>Map хөдөлгөөн: <code>map.on('moveend', function(){...})</code> &mdash; зураг дээр хүрэхэд төвийг шинэчилнэ</li>
+</ul>
+
+<h3>Дасгал</h3>
+<ul>
+  <li><code>log()</code> функц олоод түүнийгээр өөрийн мессеж нэмж туршиж үз.</li>
+  <li><code>renderTable()</code>-д багана нэм (жишээ: "Source").</li>
+  <li>Инпут бүрээс утга уншин <code>state.center</code>-г шинэчилдэг <code>applyCenter()</code>-г уншиж ойлго.</li>
+</ul>
+</body>
+</html>

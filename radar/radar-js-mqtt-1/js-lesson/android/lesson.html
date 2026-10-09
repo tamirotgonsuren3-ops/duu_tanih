@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="mn">
+<head>
+<meta charset="utf-8">
+<title>Хичээл 09 — Android холбоос</title>
+<link rel="stylesheet" href="../lessons.css">
+</head>
+<body>
+<div class="lesson-top">
+  <a href="../index.html">&#8592; Бүх хичээл</a>
+  <a href="javascript:void(0)" onclick="var p=window.parent;if(p!==window&&p.closeLesson){p.closeLesson();}else{window.close();} return false;">&#10005; Хаах</a>
+</div>
+
+<h1>Хичээл 09 — Android холбоос</h1>
+<p class="meta">Телефон: мэдрэгч, MQTT, USB serial, камер</p>
+
+<p>Телефон (Android Studio төсөл <code>android-robot-app/</code>) эдгээрийг хийдэг:</p>
+<ol>
+  <li>Мэдрэгч synth (GPS, батарея, accelerometer, gyroscope, heading)</li>
+  <li>MQTT publish (TCP 1883) &rarr; <code>robots/&lt;name&gt;/status</code></li>
+  <li>USB OTG + usb-serial-for-android &rarr; Arduino-ийн JSON мөрийг задлах</li>
+  <li>Камер: JPEG фреймүүдийг <code>POST /cam/&lt;name&gt;</code> -руу &rarr; вэб апп MJPEG-ээр харна</li>
+</ol>
+
+<h2>1. Gradle тохируулга (app/build.gradle)</h2>
+<pre><code>android {
+  namespace "radar.robot"
+  compileSdk 34
+  defaultConfig {
+    minSdk 21
+    targetSdk 34
+  }
+}
+dependencies {
+  implementation "androidx.appcompat:appcompat:1.7.0"
+  implementation "com.google.android.material:material:1.12.0"
+  implementation "org.eclipse.paho.client.mqttv3:1.2.5"          // MQTT
+  implementation "com.github.mik3y:usb-serial-for-android:3.7.0" // USB
+}</code></pre>
+<p>Интернетэд хуваарилагдаагүй <code>usb-serial</code> нь JitPack-ээс авагдана.</p>
+
+<h2>2. Permissions (AndroidManifest)</h2>
+<pre><code>&lt;uses-permission android:name="android.permission.INTERNET"/&gt;
+&lt;uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/&gt;
+&lt;uses-permission android:name="android.permission.CAMERA"/&gt;
+&lt;uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/&gt;
+&lt;uses-feature android:name="android.usb.host" android:required="false"/&gt;
+android:usesCleartextTraffic="true"   &lt;!-- http://-д cleartext зөвшөөрөх --&gt;</code></pre>
+<p><code>usesCleartextTraffic</code> нь камерын JPEG-ийг энгийн HTTP-ээр (TLS-гүй) илгээхэд шаардлагатай.</p>
+
+<h2>3. Мэдрэгч (SensorsCollector.kt)</h2>
+<pre><code>class SensorsCollector(private val ctx: Context, private val out: SensorState) {
+  private val mgr = ctx.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+
+  fun start() {
+    mgr.registerListener(listener,
+      mgr.getDefaultSensor(Sensor.TYPE_ACCELEROMETER),
+      SensorManager.SENSOR_DELAY_UI)
+    mgr.registerListener(listener,
+      mgr.getDefaultSensor(Sensor.TYPE_GYROSCOPE),
+      SensorManager.SENSOR_DELAY_UI)
+  }
+  private val listener = object : SensorEventListener {
+    override fun onSensorChanged(e: SensorEvent) {
+      when (e.sensor.type) {
+        Sensor.TYPE_ACCELEROMETER -&gt; { out.ax = e.values[0]; out.ay = e.values[1]; out.az = e.values[2]; }
+        Sensor.TYPE_GYROSCOPE     -&gt; { out.gx = e.values[0]; out.gy = e.values[1]; out.gz = e.values[2]; }
+      }
+    }
+  }
+}</code></pre>
+
+<h2>4. GPS (LocationMonitor.kt)</h2>
+<pre><code>fun start() {
+  if (ActivityCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_FINE_LOCATION) !=
+      PackageManager.PERMISSION_GRANTED) return
+  locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000, 1f, listener)
+}
+private val listener = object : LocationListener {
+  override fun onLocationChanged(l: Location) {
+    out.hasLocation = true; out.lat = l.latitude; out.lon = l.longitude
+    out.alt = l.altitude; out.speed = l.speed
+  }
+}</code></pre>
+<p>Heading нь accelerometer-оос тооцогдож, GPS-ээс <code>l.bearing</code> байвал давуугаар авдаг.</p>
+
+<h2>5. MQTT publish (MqttManager.kt)</h2>
+<pre><code>fun start() {
+  val opts = MqttConnectOptions().apply {
+    isCleanSession = true; connectionTimeout = 10
+    keepAliveInterval = 20; automaticReconnect = true
+  }
+  client.connect(opts)   // Background thread-д
+}
+fun publish(topic: String, body: String) {
+  if (!client.isConnected) return
+  val msg = MqttMessage(body.toByteArray()).apply { qos = 1 }
+  client.publish(topic, msg)
+}</code></pre>
+<p>MainActivity нь 1 секунд тутам үүсгэсэн JSON-ийг publish хийдэг:</p>
+<pre><code>val json = JSONObject().apply {
+  put("name", robot)
+  put("lat", state.lat); put("long", state.lon)
+  put("battery", state.battery)
+  put("accel", JSONArray().apply { put(state.ax); put(state.ay); put(state.az) })
+  put("gyro", JSONArray().apply { put(state.gx); put(state.gy); put(state.gz) })
+  ...
+}
+mqtt.publish("robots/$robot/status", json.toString())</code></pre>
+
+<h2>6. USB serial + радар задлал</h2>
+<pre><code>val manager = getSystemService(Context.USB_SERVICE) as UsbManager
+val port = manager.deviceList.values.firstOrNull()?.let {
+  UsbSerialProber.getDefaultProber().findDriver(it)?.ports?.get(0)
+}
+port?.open(connection)?.apply {
+  setParameters(115200, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
+  read(buffer)   // bytes → RadarFrameParser.onData()
+}
+</code></pre>
+<p>Радар пакет телё ямар байгааг танихын тулд <code>RadarFrameParser.kt</code> Arduino-ийн JSON мөрийг барьж, <code>onRadarReport</code>-ээ MQTT руу Relay хийнэ.</p>
+
+<h2>7. Камер (CameraController.kt)</h2>
+<pre><code>// Camera2 capture loop: frame → Bitmap JPEG → HttpURLConnection POST
+thread {
+  val conn = URL("http://$host:$httpPort/cam/$robot").openConnection() as HttpURLConnection
+  conn.requestMethod = "POST"
+  conn.doOutput = true
+  conn.setRequestProperty("Content-Type", "image/jpeg")
+  conn.outputStream.use { it.write(jpegBytes) }
+  val code = conn.responseCode   // 200 = "ok N"
+}</code></pre>
+
+<div class="note">Android төслийг энэ pc-д build хийх боломжгүй (Android SDK байхгүй). Утас: Android Studio-г нээж, Gradle sync + Build APK. Утас болон сервер LAN дээр ижил Wi-Fi-д байх ёстой (broker IP = PC).</div>
+
+<h3>Дасгал</h3>
+<ul>
+  <li><code>MainActivity</code>-д status JSON-д шинэ талбар нэмж (жишээ: ram), вэб хүснэгтэнд харагдацгүй байхыг ажигла.</li>
+  <li>Publish interval (default 1000ms) -ийг <code>etIntervalMs</code> инпуттай өөрчлө.</li>
+</ul>
+</body>
+</html>
